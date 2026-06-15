@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 import sys
 import os
+import json
 import rospy
 import cv2
 import numpy as np
 
-from PyQt5.QtWidgets import QApplication, QLabel, QMainWindow, QVBoxLayout, QWidget
+from PyQt5.QtWidgets import QApplication, QLabel, QMainWindow, QVBoxLayout, QHBoxLayout, QWidget, QDoubleSpinBox, QFormLayout, QGroupBox, QPushButton
 from PyQt5.QtGui import QImage, QPixmap
 from PyQt5.QtCore import Qt, pyqtSignal, QObject, QTimer
 
@@ -22,7 +23,19 @@ class DataCollectorUI(QMainWindow):
         rospy.init_node('data_collector_ui', anonymous=False)
         self.veh = os.environ.get('VEHICLE_NAME', 'default_robot')
         
-        # Publishers & Subscribers (tcp_nodelay=True added to kill network lag)
+        # Load Tuning Config
+        self.config_path = "/dataset/tuning_config.json"
+        self.tuning = self.load_tuning_config()
+
+        # --- LIVE DRIVING VARIABLES ---
+        self.live_v_fwd = self.tuning["v_fwd"]
+        self.live_v_rev = self.tuning["v_rev"]
+        self.live_v_bump_a = self.tuning["v_bump_a"]
+        self.live_omega_a = self.tuning["omega_a"]
+        self.live_v_bump_d = self.tuning["v_bump_d"]
+        self.live_omega_d = self.tuning["omega_d"]
+
+        # Publishers & Subscribers
         self.cmd_pub = rospy.Publisher(f"/{self.veh}/car_cmd_switch_node/cmd", Twist2DStamped, queue_size=1, tcp_nodelay=True)
         self.rec_pub = rospy.Publisher(f"/{self.veh}/data_collector/is_recording", Bool, queue_size=1)
         self.intent_pub = rospy.Publisher(f"/{self.veh}/data_collector/intent", String, queue_size=1)
@@ -39,28 +52,73 @@ class DataCollectorUI(QMainWindow):
         self.current_intent = "straight"
         self.current_vel_left = 0.0
         self.current_vel_right = 0.0
-        
-        # Track multiple key presses
         self.keys_pressed = set()
 
         self.init_ui()
 
-        # Control Loop
+        # Control Loop (10 Hz)
         self.control_timer = QTimer()
         self.control_timer.timeout.connect(self.publish_commands)
-        self.control_timer.start(100) # 10 Hz
+        self.control_timer.start(100)
+
+    def load_tuning_config(self):
+        default_config = {
+            "v_fwd": 0.5, "v_rev": -0.5, 
+            "v_bump_a": 0.1, "omega_a": 5.0,
+            "v_bump_d": 0.1, "omega_d": 5.0
+        }
+        try:
+            if os.path.exists(self.config_path):
+                with open(self.config_path, 'r') as f:
+                    # Update defaults with saved values in case new keys were added
+                    saved = json.load(f)
+                    default_config.update(saved)
+        except Exception:
+            pass
+        return default_config
+
+    def apply_and_save_tuning(self):
+        # Hot-swap live variables
+        self.live_v_fwd = self.w_spin.value()
+        self.live_v_rev = self.s_spin.value()
+        self.live_v_bump_a = self.a_v_spin.value()
+        self.live_omega_a = self.a_omega_spin.value()
+        self.live_v_bump_d = self.d_v_spin.value()
+        self.live_omega_d = self.d_omega_spin.value()
+        
+        # Update Dictionary
+        self.tuning = {
+            "v_fwd": self.live_v_fwd,
+            "v_rev": self.live_v_rev,
+            "v_bump_a": self.live_v_bump_a,
+            "omega_a": self.live_omega_a,
+            "v_bump_d": self.live_v_bump_d,
+            "omega_d": self.live_omega_d
+        }
+        
+        # Save to Disk
+        try:
+            os.makedirs(os.path.dirname(self.config_path), exist_ok=True)
+            with open(self.config_path, 'w') as f:
+                json.dump(self.tuning, f, indent=4)
+        except Exception as e:
+            rospy.logerr(f"Failed to save config: {e}")
+
+        self.status_label.setText(f"Recording: {'ON' if self.is_recording else 'OFF'} | Intent: {self.current_intent} | (TUNING APPLIED!)")
+        self.setFocus()
 
     def init_ui(self):
-        self.setWindowTitle("CIL Data Collector")
-        self.setGeometry(100, 100, 640, 580)
+        self.setWindowTitle("CIL Data Collector & Tuner")
+        self.setGeometry(100, 100, 800, 750)
 
-        widget = QWidget(self)
+        main_widget = QWidget(self)
         layout = QVBoxLayout()
 
         self.image_label = QLabel(self)
         self.image_label.setAlignment(Qt.AlignCenter)
         self.image_label.setText("Waiting for Camera Feed...")
         self.image_label.setMinimumSize(640, 480)
+        self.image_label.setStyleSheet("background-color: black; color: white;")
         layout.addWidget(self.image_label)
 
         self.status_label = QLabel(self)
@@ -72,9 +130,64 @@ class DataCollectorUI(QMainWindow):
         self.motor_label.setStyleSheet("color: black; font-family: monospace; font-size: 14px;")
         layout.addWidget(self.motor_label)
 
-        widget.setLayout(layout)
-        self.setCentralWidget(widget)
+        # --- TUNING DASHBOARD ---
+        tuning_group = QGroupBox("Live Tuning Parameters")
+        tuning_layout = QHBoxLayout()
+
+        # W/S (Straight) Column
+        form_w_s = QFormLayout()
+        self.w_spin = QDoubleSpinBox()
+        self.w_spin.setRange(0.0, 1.0); self.w_spin.setSingleStep(0.05); self.w_spin.setValue(self.live_v_fwd)
+        
+        self.s_spin = QDoubleSpinBox()
+        self.s_spin.setRange(-1.0, 0.0); self.s_spin.setSingleStep(0.05); self.s_spin.setValue(self.live_v_rev)
+        
+        form_w_s.addRow("W (Fwd V):", self.w_spin)
+        form_w_s.addRow("S (Rev V):", self.s_spin)
+        tuning_layout.addLayout(form_w_s)
+
+        # A (Left Turn) Column
+        form_a = QFormLayout()
+        self.a_v_spin = QDoubleSpinBox()
+        self.a_v_spin.setRange(-1.0, 1.0); self.a_v_spin.setSingleStep(0.05); self.a_v_spin.setValue(self.live_v_bump_a)
+        
+        self.a_omega_spin = QDoubleSpinBox()
+        self.a_omega_spin.setRange(0.0, 15.0); self.a_omega_spin.setSingleStep(0.5); self.a_omega_spin.setValue(self.live_omega_a)
+        
+        form_a.addRow("A (Fwd V):", self.a_v_spin)
+        form_a.addRow("A (+Omega):", self.a_omega_spin)
+        tuning_layout.addLayout(form_a)
+
+        # D (Right Turn) Column
+        form_d = QFormLayout()
+        self.d_v_spin = QDoubleSpinBox()
+        self.d_v_spin.setRange(-1.0, 1.0); self.d_v_spin.setSingleStep(0.05); self.d_v_spin.setValue(self.live_v_bump_d)
+        
+        self.d_omega_spin = QDoubleSpinBox()
+        # Note: We keep this positive in the UI, and subtract it in the logic block
+        self.d_omega_spin.setRange(0.0, 15.0); self.d_omega_spin.setSingleStep(0.5); self.d_omega_spin.setValue(self.live_omega_d)
+        
+        form_d.addRow("D (Fwd V):", self.d_v_spin)
+        form_d.addRow("D (-Omega):", self.d_omega_spin)
+        tuning_layout.addLayout(form_d)
+
+        # Apply Button
+        self.apply_btn = QPushButton("Apply\n&\nSave")
+        self.apply_btn.clicked.connect(self.apply_and_save_tuning)
+        self.apply_btn.setStyleSheet("background-color: #28a745; color: white; font-weight: bold; padding: 10px;")
+        tuning_layout.addWidget(self.apply_btn)
+
+        tuning_group.setLayout(tuning_layout)
+        layout.addWidget(tuning_group)
+
+        main_widget.setLayout(layout)
+        self.setCentralWidget(main_widget)
         self.update_status_ui()
+        
+        self.setFocusPolicy(Qt.StrongFocus)
+
+    def mousePressEvent(self, event):
+        self.setFocus()
 
     def update_status_ui(self):
         color = "green" if self.is_recording else "red"
@@ -127,19 +240,21 @@ class DataCollectorUI(QMainWindow):
             self.keys_pressed.remove(event.key())
 
     def publish_commands(self):
-        # Calculate velocity based on ALL currently held keys
         v = 0.0
         omega = 0.0
-        if Qt.Key_W in self.keys_pressed: v += 0.5
-        if Qt.Key_S in self.keys_pressed: v -= 0.5
+        
+        # Drive using the strictly independent LIVE variables
+        if Qt.Key_W in self.keys_pressed: v += self.live_v_fwd
+        if Qt.Key_S in self.keys_pressed: v += self.live_v_rev
         if Qt.Key_A in self.keys_pressed: 
-            omega += 7.0
-            v += 0.1 # Slight forward bump to overcome physical floor friction
+            omega += self.live_omega_a
+            v += self.live_v_bump_a
         if Qt.Key_D in self.keys_pressed: 
-            omega -= 15.0
-            v += 0.15
+            # Note: We subtract here so the UI user can just enter a positive magnitude for D
+            omega -= self.live_omega_d
+            v += self.live_v_bump_d
 
-        # Extract specific WASD binary states for logging
+        # Log Keys
         w_state = 1 if Qt.Key_W in self.keys_pressed else 0
         a_state = 1 if Qt.Key_A in self.keys_pressed else 0
         s_state = 1 if Qt.Key_S in self.keys_pressed else 0
