@@ -1,0 +1,15 @@
+<?xml version="1.0"?>
+<package format="2">
+  <name>data_collector_pkg</name>
+  <version>1.0.0</version>
+  <description>Data collection UI for Conditional Imitation Learning</description>
+  <maintainer email="borapankaj901@gmail.com">Pankaj Bora</maintainer>
+  <license>GPLv3</license>
+
+  <buildtool_depend>catkin</buildtool_depend>
+  <depend>rospy</depend>
+  <depend>sensor_msgs</depend>
+  <depend>std_msgs</depend>
+  <depend>duckietown_msgs</depend>
+  <depend>cv_bridge</depend>
+</package>

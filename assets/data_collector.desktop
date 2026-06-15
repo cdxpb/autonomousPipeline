@@ -1,0 +1,9 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Data Collector UI
+Comment=Launch the CIL Data Collection Node
+Exec=bash -c "source /code/catkin_ws/devel/setup.bash && rosrun data_collector_pkg logger_node.py && rosrun data_collector_pkg ui_node.py"
+Icon=utilities-terminal
+Terminal=true
+Categories=Development;

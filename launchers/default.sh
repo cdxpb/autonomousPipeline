@@ -8,13 +8,12 @@ dt-launchfile-init
 # YOUR CODE BELOW THIS LINE
 # ----------------------------------------------------------------------------
 
+echo "VNC Environment is running."
+echo "Container is now awake and waiting for UI interactions."
 
-# NOTE: Use the variable DT_REPO_PATH to know the absolute path to your code
-# NOTE: Use `dt-exec COMMAND` to run the main process (blocking process)
-
-# launching app
-dt-exec echo "This is an empty launch script. Update it to launch your application."
-
+# Use dt-exec to run a blocking command. This keeps the launchfile 
+# from joining, keeping your container alive indefinitely.
+dt-exec sleep infinity
 
 # ----------------------------------------------------------------------------
 # YOUR CODE ABOVE THIS LINE

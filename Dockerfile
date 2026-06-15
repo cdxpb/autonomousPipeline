@@ -1,7 +1,7 @@
 # parameters
-ARG REPO_NAME="<REPO_NAME_HERE>"
-ARG DESCRIPTION="<DESCRIPTION_HERE>"
-ARG MAINTAINER="<YOUR_FULL_NAME> (<YOUR_EMAIL_ADDRESS>)"
+ARG REPO_NAME="autonomousPipeline"
+ARG DESCRIPTION="Autonomous Pipeline for lane following data collection with a GUI interface for controlling the process and storing data."
+ARG MAINTAINER="Pankaj Bora borapankaj901@gmail.com"
 # pick an icon from: https://fontawesome.com/v4.7.0/icons/
 ARG ICON="cube"
 
@@ -52,6 +52,7 @@ ENV DT_MODULE_TYPE="${REPO_NAME}" \
 
 # install apt dependencies
 COPY ./dependencies-apt.txt "${REPO_PATH}/"
+RUN curl -s https://raw.githubusercontent.com/ros/rosdistro/master/ros.asc | apt-key add -
 RUN dt-apt-install ${REPO_PATH}/dependencies-apt.txt
 
 # install python3 dependencies
@@ -72,12 +73,17 @@ RUN . /opt/ros/${ROS_DISTRO}/setup.sh && \
 COPY ./launchers/. "${LAUNCH_PATH}/"
 RUN dt-install-launchers "${LAUNCH_PATH}"
 
+# create desktop entry
+RUN mkdir -p /root/Desktop
+COPY assets/data_collector.desktop /root/Desktop/data_collector.desktop
+RUN chmod +x /root/Desktop/data_collector.desktop
+
 # define default command
 CMD ["bash", "-c", "dt-launcher-${DT_LAUNCHER}"]
 
 # store module metadata
-LABEL org.duckietown.label.module.type="${REPO_NAME}" \
-    org.duckietown.label.module.description="${DESCRIPTION}" \
+LABEL org.duckietown.label.module.type="autonomousPipeline" \
+    org.duckietown.label.module.description="Autonomous Pipeline for lane following data collection with a GUI interface for controlling the process and storing data." \
     org.duckietown.label.module.icon="${ICON}" \
     org.duckietown.label.platform.os="${TARGETOS}" \
     org.duckietown.label.platform.architecture="${TARGETARCH}" \
