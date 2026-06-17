@@ -16,30 +16,33 @@ Duckiematrix (Virtual):
 Launch the matrix engine. The default vehicle map_0/vehicle_0 corresponds to the hostname golduck. 
 Note: Ensure the simulation is Playing (press P) and Rendering (press R). If paused, camera data will not publish.
 
+```
 dts matrix engine run --sandbox --verbose
 dts matrix run --browser --engine hostip
 dts matrix attach golduck map_0/vehicle_0
+```
 
 ## 2. Build and Run
 
 Open your terminal in the project root.
 
 1. Create the local dataset folder:
-   mkdir -p ~/Desktop/my_dataset
+   `mkdir -p ~/Desktop/my_dataset
 
 2. Build the Docker image:
-   dts devel build -f
+   `dts devel build -f
 
 3. Run the container with native X11 forwarding. Replace <ROBOT_NAME> with your hostname (e.g., golduck):
-   dts devel run -X --robot <ROBOT_NAME> -v ~/Desktop/dataset:/dataset --cmd bash
+   `dts devel run -X --robot <ROBOT_NAME> -v ~/Desktop/my_dataset:/dataset --cmd bash
 
 ## 3. Execute Nodes
 
 Inside the container terminal run the following commands:
-
+   ``
    source /code/catkin_ws/devel/setup.bash
    rosrun data_collector_pkg logger_node.py &
    rosrun data_collector_pkg ui_node.py
+   ```
 
 ## Controls
 
