@@ -33,7 +33,7 @@ Open your terminal in the project root.
    `dts devel build -f
 
 3. Run the container with native X11 forwarding. Replace <ROBOT_NAME> with your hostname (e.g., golduck):  
-   `dts devel run -X --robot <ROBOT_NAME> -v ~/Desktop/my_dataset:/dataset --cmd bash
+   `dts devel run -X --robot <ROBOT_NAME> -v ~/Desktop/my_dataset:/dataset --cmd bash`
 
 ## 3. Execute Nodes
 
