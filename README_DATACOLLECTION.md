@@ -27,10 +27,10 @@ dts matrix attach golduck map_0/vehicle_0
 Open your terminal in the project root.
 
 1. Create the local dataset folder:  
-   `mkdir -p ~/Desktop/my_dataset
+   `mkdir -p ~/Desktop/my_dataset`
 
 2. Build the Docker image:  
-   `dts devel build -f
+   `dts devel build -f`
 
 3. Run the container with native X11 forwarding. Replace <ROBOT_NAME> with your hostname (e.g., golduck):  
    `dts devel run -X --robot <ROBOT_NAME> -v ~/Desktop/my_dataset:/dataset --cmd bash`
