@@ -2,11 +2,11 @@ import torch
 import torch.nn as nn
 
 class ConditionalPilotNet(nn.Module):
-    def __init__(self):
+    def __init__(self, in_channels=3):
         super(ConditionalPilotNet, self).__init__()
         
         self.feature_extractor = nn.Sequential(
-            nn.Conv2d(3, 24, kernel_size=5, stride=2), nn.BatchNorm2d(24), nn.ReLU(),
+            nn.Conv2d(in_channels, 24, kernel_size=5, stride=2), nn.BatchNorm2d(24), nn.ReLU(),
             nn.Conv2d(24, 36, kernel_size=5, stride=2), nn.BatchNorm2d(36), nn.ReLU(),
             nn.Conv2d(36, 48, kernel_size=5, stride=2), nn.BatchNorm2d(48), nn.ReLU(),
             nn.Conv2d(48, 64, kernel_size=3, stride=1), nn.BatchNorm2d(64), nn.ReLU(),

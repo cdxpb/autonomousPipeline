@@ -4,6 +4,13 @@ import os
 import rospy
 import cv2
 import numpy as np
+import argparse
+import torch
+import torchvision.transforms.functional as TF
+try:
+    from ultralytics import YOLO
+except ImportError:
+    pass
 from PIL import Image
 
 from sensor_msgs.msg import CompressedImage
@@ -12,7 +19,7 @@ from std_msgs.msg import String
 
 # DRY Imports from our package
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from utils import crop_image, get_eval_transforms, INTENT_MAP
+from utils import crop_image, get_eval_transforms, INTENT_MAP, CROP_TOP_ROWS
 
 # ---------------------------------------------------------
 # DUAL-BACKEND DETECTION (TensorRT vs ONNX Runtime)
@@ -37,12 +44,18 @@ USE_TENSORRT = False
 rospy.logwarn("MANUAL OVERRIDE: Forcing ONNX Runtime on Physical Robot!")
 
 class AutonomousDriver:
-    def __init__(self):
+    def __init__(self, skip_segmentation=False):
         rospy.init_node('autonomous_driver_node', anonymous=False)
         self.veh = os.environ.get('VEHICLE_NAME', 'default_robot')
+        self.skip_segmentation = skip_segmentation
 
-        # Load Model
-        self.model_path = "/models/pilotnet/best_model" # Omit extension, logic decides
+        # Load Models
+        if self.skip_segmentation:
+            self.model_path = "/models/pilotnet/best_model" # Omit extension, logic decides
+        else:
+            self.model_path = "/models/pilotnet/segPilot"
+            self.yolo_path = "models/yolo_model/yolo_model.onnx"
+            
         self.setup_inference_engine()
 
         self.transform = get_eval_transforms()
@@ -54,6 +67,11 @@ class AutonomousDriver:
         self.intent_sub = rospy.Subscriber(f"/{self.veh}/data_collector/intent", String, self.intent_cb)
 
     def setup_inference_engine(self):
+        if not self.skip_segmentation:
+            rospy.loginfo("Loading YOLO Semantic Segmentation model...")
+            self.yolo_session = YOLO(self.yolo_path, task="semantic")
+
+        rospy.loginfo(f"Loading PilotNet model from {self.model_path}...")
         if USE_TENSORRT:
             self.logger = trt.Logger(trt.Logger.WARNING)
             with open(f"{self.model_path}.engine", "rb") as f, trt.Runtime(self.logger) as runtime:
@@ -61,7 +79,8 @@ class AutonomousDriver:
             self.context = self.engine.create_execution_context()
             
             # Allocate memory for inputs/outputs
-            self.d_img_in = cuda.mem_alloc(1 * 3 * 112 * 224 * 4) # Float32 size
+            channels = 3 if self.skip_segmentation else 1
+            self.d_img_in = cuda.mem_alloc(1 * channels * 112 * 224 * 4) # Float32 size
             self.d_intent_in = cuda.mem_alloc(1 * 4 * 4) 
             self.d_output = cuda.mem_alloc(1 * 2 * 4)
             self.bindings = [int(self.d_img_in), int(self.d_intent_in), int(self.d_output)]
@@ -73,14 +92,32 @@ class AutonomousDriver:
 
     def image_cb(self, msg):
         try:
-            # Decode & Crop
+            # Decode image
             np_arr = np.frombuffer(msg.data, np.uint8)
             cv_image = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
-            pil_image = Image.fromarray(cv2.cvtColor(cv_image, cv2.COLOR_BGR2RGB))
-            cropped_img = crop_image(pil_image)
 
-            # Prep Inputs
-            img_tensor = self.transform(cropped_img).unsqueeze(0).numpy() # Shape: (1, 3, 112, 224)
+            if self.skip_segmentation:
+                # Original Pipeline
+                pil_image = Image.fromarray(cv2.cvtColor(cv_image, cv2.COLOR_BGR2RGB))
+                cropped_img = crop_image(pil_image)
+                img_tensor = self.transform(cropped_img).unsqueeze(0).numpy() # Shape: (1, 3, 112, 224)
+            else:
+                # YOLO Segmentation Pipeline
+                rgb_image = cv2.cvtColor(cv_image, cv2.COLOR_BGR2RGB)
+                yolo_input = rgb_image.astype(np.float32) / 255.0
+                yolo_input = np.transpose(yolo_input, (2, 0, 1)) # (3, 480, 640)
+                yolo_input = np.expand_dims(yolo_input, axis=0)  # (1, 3, 480, 640)
+
+                mask = self.yolo_session(yolo_input)[0].semantic_mask.data # (480, 640)
+                mask = mask.unsqueeze(0) # (1, 480, 640)
+
+                _, height, width = mask.shape
+                cropped_img = TF.crop(mask, top=CROP_TOP_ROWS, left=0, height=height - CROP_TOP_ROWS, width=width)
+                resized_mask = TF.resize(cropped_img, (112, 224))
+
+                img_tensor = resized_mask.to(torch.float32).unsqueeze(0).cpu().numpy() # (1, 1, 112, 224)
+
+            # Prep Intent
             intent_tensor = np.array([INTENT_MAP.get(self.current_intent, [1.0, 0.0, 0.0, 0.0])], dtype=np.float32) # Shape: (1, 4)
 
             # Inference
@@ -110,5 +147,9 @@ class AutonomousDriver:
             rospy.logerr(f"Inference crash: {e}")
 
 if __name__ == '__main__':
-    node = AutonomousDriver()
+    parser = argparse.ArgumentParser(description="Autonomous Driver Node")
+    parser.add_argument("--skip_segmentation", action="store_true", help="Skip YOLO segmentation and use original PilotNet")
+    args, unknown = parser.parse_known_args(rospy.myargv()[1:])
+    
+    node = AutonomousDriver(skip_segmentation=args.skip_segmentation)
     rospy.spin()
