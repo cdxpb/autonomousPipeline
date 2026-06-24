@@ -11,6 +11,7 @@ from duckietown_msgs.msg import WheelsCmdStamped
 from std_msgs.msg import String
 
 # DRY Imports from our package
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from utils import crop_image, get_eval_transforms, INTENT_MAP
 
 # ---------------------------------------------------------
@@ -41,7 +42,7 @@ class AutonomousDriver:
         self.veh = os.environ.get('VEHICLE_NAME', 'default_robot')
 
         # Load Model
-        self.model_path = "/models/pilotnet/" # Omit extension, logic decides
+        self.model_path = "/models/pilotnet/best_model" # Omit extension, logic decides
         self.setup_inference_engine()
 
         self.transform = get_eval_transforms()

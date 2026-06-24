@@ -26,42 +26,19 @@ dts matrix attach golduck map_0/vehicle_0
 
 Open your terminal in the project root.
 
-1. Create the local dataset folder:  
-   `mkdir -p ~/Desktop/my_dataset`
-
-2. Build the Docker image:  
+1. Build the Docker image:  
    `dts devel build -f`
 
 3. Run the container with native X11 forwarding. Replace <ROBOT_NAME> with your hostname (e.g., golduck):  
-   `dts devel run -X --robot <ROBOT_NAME> -v ~/Desktop/my_dataset:/dataset --cmd bash`
+   `dts devel run -X --robot <ROBOT_NAME> --cmd bash`
 
 ## 3. Execute Nodes
 
 Inside the container terminal run the following commands:
-   ```
+   ``
    source /code/catkin_ws/devel/setup.bash
-   rosrun data_collector_pkg logger_node.py &
-   rosrun data_collector_pkg ui_node.py
+   rosrun cond_imitation_learning_pkg autonomous_node.py
    ```
-
-## Controls
-
-Ensure the PyQt5 UI window is focused.
-* Drive: W (Forward), S (Reverse), A (Left), D (Right)
-* Record: R (Toggles data logging on/off)
-* Intents: I (Straight), J (Left), L (Right), K (Stop)
-
-## Output Format
-
-Data is saved to ~/Desktop/my_dataset/cil_dataset_YYYYMMDD-HHMMSS/ on your host machine.
-
-* images/: Synchronized .jpg frames.
-* log.csv: Structured as timestamp, image_filename, vel_left, vel_right, intent.
-
-
-Backup docker copy commands:
-docker ps
-docker cp <CONTAINER_ID>:/dataset ~/Desktop/dataset
 
 To hack into another shell:
 docker exec -it dts-run-autonomouspipeline bash

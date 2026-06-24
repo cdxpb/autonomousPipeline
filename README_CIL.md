@@ -35,7 +35,7 @@ Open your terminal in the project root.
 ## 3. Execute Nodes
 
 Inside the container terminal run the following commands:
-   ``
+   ```
    source /code/catkin_ws/devel/setup.bash
    rosrun cond_imitation_learning_pkg autonomous_node.py
    ```
