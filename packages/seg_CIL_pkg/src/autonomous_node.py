@@ -44,7 +44,7 @@ class AutonomousDriver:
         self.veh = os.environ.get('VEHICLE_NAME', 'default_robot')
 
         # Model Paths
-        self.pilotnet_path = "/models/pilotnet/" # Omit extension, logic decides
+        self.pilotnet_path = "/models/pilotnet/segPilot.onnx" # Omit extension, logic decides
         self.yolo_path = "/yolo_model/yolo_model.onnx" # Semantic Segmentation model
         
         self.setup_inference_engines()
@@ -77,7 +77,7 @@ class AutonomousDriver:
             self.d_output = cuda.mem_alloc(1 * 2 * 4)
             self.bindings = [int(self.d_img_in), int(self.d_intent_in), int(self.d_output)]
         else:
-            self.ort_session = ort.InferenceSession(f"{self.pilotnet_path}.onnx")
+            self.ort_session = ort.InferenceSession(self.pilotnet_path)
 
     def intent_cb(self, msg):
         self.current_intent = msg.data
