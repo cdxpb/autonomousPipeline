@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
 <package format="2">
-  <name>cond_imitation_learning_pkg</name>
+  <name>seg_CIL_pkg</name>
   <version>1.0.0</version>
   <description>Driving via Conditional Imitation Learning</description>
   <maintainer email="borapankaj901@gmail.com">Pankaj Bora</maintainer>

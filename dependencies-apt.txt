@@ -7,6 +7,7 @@ qtbase5-dev-tools
 qttools5-dev
 qttools5-dev-tools
 python3-pyqt5
+python3-psutil-
 
 # Image Transport (for ROS)
 ros-noetic-cv-bridge
