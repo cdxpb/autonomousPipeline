@@ -14,6 +14,7 @@ from duckietown_msgs.msg import WheelsCmdStamped
 from std_msgs.msg import String
 
 # DRY Imports from our package
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from utils import crop_image, get_eval_transforms, INTENT_MAP, CROP_TOP_ROWS
 
 # ---------------------------------------------------------
@@ -45,7 +46,7 @@ class AutonomousDriver:
 
         # Model Paths
         self.pilotnet_path = "/models/pilotnet/segPilot.onnx" # Omit extension, logic decides
-        self.yolo_path = "/yolo_model/yolo_model.onnx" # Semantic Segmentation model
+        self.yolo_path = "models/yolo_model/yolo_model.onnx" # Semantic Segmentation model
         
         self.setup_inference_engines()
 
