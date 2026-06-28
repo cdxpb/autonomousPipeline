@@ -55,7 +55,7 @@ class AutonomousDriverUI(QMainWindow):
     def __init__(self, skip_segmentation=False):
         super().__init__()
         rospy.init_node('autonomous_driver_ui_node', anonymous=False)
-        self.veh = os.environ.get('VEHICLE_NAME', 'default_robot')
+        self.veh = os.environ.get('VEHICLE_NAME', 'golduck')
         self.skip_segmentation = skip_segmentation
         self.current_intent = "straight"
         
@@ -66,10 +66,10 @@ class AutonomousDriverUI(QMainWindow):
 
         # Model Paths
         if self.skip_segmentation:
-            self.model_path = "/models/pilotnet/best_model"
+            self.model_path = "../autonomouspipeline/models/pilotnet/best_model"
         else:
-            self.model_path = "/models/pilotnet/segPilot"
-            self.yolo_path = "models/yolo_model/yolo_model.onnx"
+            self.model_path = "../autonomouspipeline/models/pilotnet/segPilot"
+            self.yolo_path = "../autonomouspipeline/models/yolo_model/yolo_model.onnx"
 
         self.transform = get_eval_transforms()
 
@@ -257,16 +257,42 @@ class AutonomousDriverUI(QMainWindow):
     # ---------------------------------------------------------
     # MAIN ROS INFERENCE LOOP
     # ---------------------------------------------------------
+    def setup_inference_engine(self):
+        if not self.skip_segmentation:
+            rospy.loginfo("UI: Loading YOLO Semantic Segmentation model for previews...")
+            # Added verbose=False to stop the terminal spam!
+            self.yolo_session = YOLO(self.yolo_path, task="semantic")
+
+        rospy.loginfo(f"UI: Loading PilotNet model from {self.model_path}...")
+        if USE_TENSORRT:
+            self.logger = trt.Logger(trt.Logger.WARNING)
+            with open(f"{self.model_path}.engine", "rb") as f, trt.Runtime(self.logger) as runtime:
+                self.engine = runtime.deserialize_cuda_engine(f.read())
+            self.context = self.engine.create_execution_context()
+            
+            channels = 3 if self.skip_segmentation else 1
+            self.d_img_in = cuda.mem_alloc(1 * channels * 112 * 224 * 4)
+            self.d_intent_in = cuda.mem_alloc(1 * 4 * 4) 
+            self.d_output = cuda.mem_alloc(1 * 2 * 4)
+            self.bindings = [int(self.d_img_in), int(self.d_intent_in), int(self.d_output)]
+        else:
+            self.ort_session = ort.InferenceSession(f"{self.model_path}.onnx")
+
+
     def image_cb(self, msg):
         try:
-            # 1. Decode Image
+            # 1. Decode Image Safely
             np_arr = np.frombuffer(msg.data, np.uint8)
             cv_image = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
-            rgb_image = cv2.cvtColor(cv_image, cv2.COLOR_BGR2RGB)
+            
+            if cv_image is None:
+                rospy.logwarn_throttle(2.0, "Received empty or corrupted image frame.")
+                return
 
+            rgb_image = cv2.cvtColor(cv_image, cv2.COLOR_BGR2RGB)
             ui_model_view = None
 
-            # 2. Preprocessing (Always runs to supply the UI Preview)
+            # 2. Preprocessing
             if self.skip_segmentation:
                 pil_image = Image.fromarray(rgb_image)
                 cropped_img = crop_image(pil_image)
@@ -277,7 +303,9 @@ class AutonomousDriverUI(QMainWindow):
                 yolo_input = np.transpose(yolo_input, (2, 0, 1))
                 yolo_input = np.expand_dims(yolo_input, axis=0)
 
-                mask = self.yolo_session(yolo_input)[0].semantic_mask.data
+                # verbose=False stops YOLO from printing to console on every frame
+                yolo_results = self.yolo_session(yolo_input, verbose=False)
+                mask = yolo_results[0].semantic_mask.data
                 mask = mask.unsqueeze(0)
 
                 _, height, width = mask.shape
@@ -289,7 +317,7 @@ class AutonomousDriverUI(QMainWindow):
 
             vel_left, vel_right = 0.0, 0.0
 
-            # 3. Inference Gate (Only runs if START was pressed)
+            # 3. Inference Gate
             if self.is_autonomous_active:
                 intent_tensor = np.array([INTENT_MAP.get(self.current_intent, [1.0, 0.0, 0.0, 0.0])], dtype=np.float32)
 
@@ -316,19 +344,18 @@ class AutonomousDriverUI(QMainWindow):
                     ort_outs = self.ort_session.run(None, ort_inputs)
                     vel_left, vel_right = ort_outs[0][0][0], ort_outs[0][0][1]
 
-                # Publish Motor Commands
                 cmd_msg = WheelsCmdStamped()
                 cmd_msg.header.stamp = rospy.Time.now()
                 cmd_msg.vel_left = float(vel_left)
                 cmd_msg.vel_right = float(vel_right)
                 self.cmd_pub.publish(cmd_msg)
 
-            # Safely relay everything to the Qt thread for live rendering
-            self.bridge.telemetry_signal.emit(rgb_image, ui_model_view, float(vel_left), float(vel_right), self.current_intent)
+            # Safely copy numpy arrays before emitting to PyQt to prevent memory corruption
+            self.bridge.telemetry_signal.emit(rgb_image.copy(), ui_model_view.copy(), float(vel_left), float(vel_right), self.current_intent)
 
         except Exception as e:
-            # We don't want a single frame failure to crash the node
-            pass 
+            # We use logerr_throttle so it prints the error once every 2 seconds instead of spamming 30 times a second
+            rospy.logerr_throttle(2.0, f"Image Processing Error: {e}")
 
     def update_ui(self, raw_img, model_img, vel_left, vel_right, intent):
         # 1. Render Raw Camera View
