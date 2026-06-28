@@ -1,155 +1,371 @@
 #!/usr/bin/env python3
 import sys
 import os
+import argparse
 import rospy
 import cv2
 import numpy as np
-import argparse
 import torch
 import torchvision.transforms.functional as TF
+from PIL import Image
+
 try:
     from ultralytics import YOLO
 except ImportError:
     pass
-from PIL import Image
 
+# ROS Messages
 from sensor_msgs.msg import CompressedImage
 from duckietown_msgs.msg import WheelsCmdStamped
 from std_msgs.msg import String
 
-# DRY Imports from our package
+# PyQt5 UI Components
+from PyQt5.QtWidgets import (QApplication, QLabel, QMainWindow, QVBoxLayout, 
+                             QHBoxLayout, QWidget, QGroupBox, QPushButton, QComboBox)
+from PyQt5.QtGui import QImage, QPixmap
+from PyQt5.QtCore import Qt, pyqtSignal, QObject
+
+# DRY Imports from your package
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from utils import crop_image, get_eval_transforms, INTENT_MAP, CROP_TOP_ROWS
 
 # ---------------------------------------------------------
-# DUAL-BACKEND DETECTION (TensorRT vs ONNX Runtime)
+# BACKEND LIBRARIES
 # ---------------------------------------------------------
-"""
-# COMMENTED OUT AUTOMATIC GPU DETECTION FOR NOW
 try:
     import tensorrt as trt
     import pycuda.driver as cuda
     import pycuda.autoinit
-    USE_TENSORRT = True
-    rospy.loginfo("NVIDIA GPU DETECTED! Using TensorRT.")
+    TRT_AVAILABLE = True
 except ImportError:
+    TRT_AVAILABLE = False
+
+try:
     import onnxruntime as ort
-    USE_TENSORRT = False
-    rospy.loginfo("No NVIDIA GPU. Falling back to ONNX Runtime (CPU).")
-"""
+    ORT_AVAILABLE = True
+except ImportError:
+    ORT_AVAILABLE = False
 
-# HARDCODE ONNX FOR TESTING
-import onnxruntime as ort
-USE_TENSORRT = False
-rospy.logwarn("MANUAL OVERRIDE: Forcing ONNX Runtime on Physical Robot!")
 
-class AutonomousDriver:
+class TelemetryBridge(QObject):
+    # Sends: raw_frame, model_frame, vel_left, vel_right, current_intent
+    telemetry_signal = pyqtSignal(np.ndarray, np.ndarray, float, float, str)
+
+class AutonomousDriverUI(QMainWindow):
     def __init__(self, skip_segmentation=False):
-        rospy.init_node('autonomous_driver_node', anonymous=False)
+        super().__init__()
+        rospy.init_node('autonomous_driver_ui_node', anonymous=False)
         self.veh = os.environ.get('VEHICLE_NAME', 'default_robot')
         self.skip_segmentation = skip_segmentation
+        self.current_intent = "straight"
+        
+        # State Flags
+        self.is_autonomous_active = False
+        self.active_backend = None
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-        # Load Models
+        # Model Paths
         if self.skip_segmentation:
-            self.model_path = "/models/pilotnet/best_model" # Omit extension, logic decides
+            self.model_path = "/models/pilotnet/best_model"
         else:
             self.model_path = "/models/pilotnet/segPilot"
             self.yolo_path = "models/yolo_model/yolo_model.onnx"
-            
-        self.setup_inference_engine()
 
         self.transform = get_eval_transforms()
-        self.current_intent = "straight"
 
-        # Publishers & Subscribers
+        # Thread-safe communication bridge
+        self.bridge = TelemetryBridge()
+        self.bridge.telemetry_signal.connect(self.update_ui)
+
+        # UI Setup
+        self.init_ui()
+
+        # Always load YOLO if not skipping, so we can preview the mask even when stopped
+        if not self.skip_segmentation:
+            rospy.loginfo("UI: Loading YOLO Semantic Segmentation model for previews...")
+            self.yolo_session = YOLO(self.yolo_path, task="semantic")
+
+        # ROS Publishers & Subscribers
         self.cmd_pub = rospy.Publisher(f"/{self.veh}/wheels_driver_node/wheels_cmd", WheelsCmdStamped, queue_size=1, tcp_nodelay=True)
         self.image_sub = rospy.Subscriber(f"/{self.veh}/camera_node/image/compressed", CompressedImage, self.image_cb, queue_size=1, buff_size=2**24, tcp_nodelay=True)
         self.intent_sub = rospy.Subscriber(f"/{self.veh}/data_collector/intent", String, self.intent_cb)
 
-    def setup_inference_engine(self):
-        if not self.skip_segmentation:
-            rospy.loginfo("Loading YOLO Semantic Segmentation model...")
-            self.yolo_session = YOLO(self.yolo_path, task="semantic")
+    def init_ui(self):
+        self.setWindowTitle(f"Autonomous Dashboard — {self.veh}")
+        self.setGeometry(100, 100, 900, 700)
 
-        rospy.loginfo(f"Loading PilotNet model from {self.model_path}...")
-        if USE_TENSORRT:
-            self.logger = trt.Logger(trt.Logger.WARNING)
-            with open(f"{self.model_path}.engine", "rb") as f, trt.Runtime(self.logger) as runtime:
-                self.engine = runtime.deserialize_cuda_engine(f.read())
-            self.context = self.engine.create_execution_context()
-            
-            # Allocate memory for inputs/outputs
-            channels = 3 if self.skip_segmentation else 1
-            self.d_img_in = cuda.mem_alloc(1 * channels * 112 * 224 * 4) # Float32 size
-            self.d_intent_in = cuda.mem_alloc(1 * 4 * 4) 
-            self.d_output = cuda.mem_alloc(1 * 2 * 4)
-            self.bindings = [int(self.d_img_in), int(self.d_intent_in), int(self.d_output)]
-        else:
-            self.ort_session = ort.InferenceSession(f"{self.model_path}.onnx")
+        main_widget = QWidget(self)
+        layout = QVBoxLayout()
 
-    def intent_cb(self, msg):
-        self.current_intent = msg.data
+        # --- TOP CONTROL BAR ---
+        control_group = QGroupBox("Execution Control")
+        control_layout = QHBoxLayout()
+        
+        self.backend_combo = QComboBox()
+        self.backend_combo.addItem("PyTorch")
+        if ORT_AVAILABLE: self.backend_combo.addItem("ONNX Runtime")
+        if TRT_AVAILABLE: self.backend_combo.addItem("TensorRT")
+        
+        self.btn_start = QPushButton("START AUTONOMOUS")
+        self.btn_start.setStyleSheet("background-color: #28a745; color: white; font-weight: bold; padding: 10px;")
+        self.btn_start.clicked.connect(self.start_autonomous)
 
-    def image_cb(self, msg):
+        self.btn_stop = QPushButton("EMERGENCY STOP")
+        self.btn_stop.setStyleSheet("background-color: #dc3545; color: white; font-weight: bold; padding: 10px;")
+        self.btn_stop.setEnabled(False)
+        self.btn_stop.clicked.connect(self.stop_autonomous)
+
+        control_layout.addWidget(QLabel("Inference Backend:"))
+        control_layout.addWidget(self.backend_combo)
+        control_layout.addWidget(self.btn_start)
+        control_layout.addWidget(self.btn_stop)
+        control_group.setLayout(control_layout)
+        layout.addWidget(control_group)
+
+        # --- CAMERA DISPLAYS ---
+        img_layout = QHBoxLayout()
+        
+        self.live_label = QLabel(self)
+        self.live_label.setAlignment(Qt.AlignCenter)
+        self.live_label.setText("Waiting for Raw Feed...")
+        self.live_label.setFixedSize(400, 300)
+        self.live_label.setStyleSheet("background-color: #121212; color: #aaaaaa; border: 2px solid #333;")
+        
+        self.model_label = QLabel(self)
+        self.model_label.setAlignment(Qt.AlignCenter)
+        self.model_label.setText("Waiting for Network Preprocessor...")
+        self.model_label.setFixedSize(400, 300)
+        self.model_label.setStyleSheet("background-color: #121212; color: #aaaaaa; border: 2px solid #333;")
+
+        img_layout.addWidget(self.live_label)
+        img_layout.addWidget(self.model_label)
+        layout.addLayout(img_layout)
+
+        # --- TELEMETRY GRAPHICS ---
+        telemetry_group = QGroupBox("Network Predictions & State")
+        telemetry_layout = QHBoxLayout()
+
+        self.motor_text = QLabel("Left Motor: 0.00  |  Right Motor: 0.00 (IDLE)")
+        self.motor_text.setStyleSheet("font-family: monospace; font-size: 18px; font-weight: bold; color: #2b2b2b;")
+        self.motor_text.setAlignment(Qt.AlignCenter)
+        telemetry_layout.addWidget(self.motor_text)
+
+        telemetry_group.setLayout(telemetry_layout)
+        layout.addWidget(telemetry_group)
+
+        # --- INTENT INJECTION PANEL ---
+        intent_group = QGroupBox("CIL Executive Intent Control")
+        intent_layout = QHBoxLayout()
+
+        self.btn_straight = QPushButton("Straight [I]")
+        self.btn_left = QPushButton("Left [J]")
+        self.btn_right = QPushButton("Right [L]")
+        self.btn_stop_intent = QPushButton("Stop [K]")
+
+        self.btn_straight.clicked.connect(lambda: self.set_intent("straight"))
+        self.btn_left.clicked.connect(lambda: self.set_intent("left"))
+        self.btn_right.clicked.connect(lambda: self.set_intent("right"))
+        self.btn_stop_intent.clicked.connect(lambda: self.set_intent("stop"))
+
+        intent_layout.addWidget(self.btn_straight)
+        intent_layout.addWidget(self.btn_left)
+        intent_layout.addWidget(self.btn_right)
+        intent_layout.addWidget(self.btn_stop_intent)
+        intent_group.setLayout(intent_layout)
+        layout.addWidget(intent_group)
+
+        main_widget.setLayout(layout)
+        self.setCentralWidget(main_widget)
+        self.update_intent_button_styles()
+        self.setFocusPolicy(Qt.StrongFocus)
+
+    # ---------------------------------------------------------
+    # STATE CONTROL
+    # ---------------------------------------------------------
+    def start_autonomous(self):
+        backend = self.backend_combo.currentText()
+        rospy.loginfo(f"Loading Model for Backend: {backend}...")
+
         try:
-            # Decode image
-            np_arr = np.frombuffer(msg.data, np.uint8)
-            cv_image = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+            if backend == "PyTorch":
+                # Assumes you have a TorchScript exported model (.pt) or you can drop your PilotNet class here
+                self.pt_model = torch.jit.load(f"{self.model_path}.pt", map_location=self.device)
+                self.pt_model.eval()
 
-            if self.skip_segmentation:
-                # Original Pipeline
-                pil_image = Image.fromarray(cv2.cvtColor(cv_image, cv2.COLOR_BGR2RGB))
-                cropped_img = crop_image(pil_image)
-                img_tensor = self.transform(cropped_img).unsqueeze(0).numpy() # Shape: (1, 3, 112, 224)
-            else:
-                # YOLO Segmentation Pipeline
-                rgb_image = cv2.cvtColor(cv_image, cv2.COLOR_BGR2RGB)
-                yolo_input = rgb_image.astype(np.float32) / 255.0
-                yolo_input = np.transpose(yolo_input, (2, 0, 1)) # (3, 480, 640)
-                yolo_input = np.expand_dims(yolo_input, axis=0)  # (1, 3, 480, 640)
+            elif backend == "ONNX Runtime":
+                self.ort_session = ort.InferenceSession(f"{self.model_path}.onnx")
 
-                mask = self.yolo_session(yolo_input)[0].semantic_mask.data # (480, 640)
-                mask = mask.unsqueeze(0) # (1, 480, 640)
+            elif backend == "TensorRT":
+                self.logger = trt.Logger(trt.Logger.WARNING)
+                with open(f"{self.model_path}.engine", "rb") as f, trt.Runtime(self.logger) as runtime:
+                    self.engine = runtime.deserialize_cuda_engine(f.read())
+                self.context = self.engine.create_execution_context()
+                channels = 3 if self.skip_segmentation else 1
+                self.d_img_in = cuda.mem_alloc(1 * channels * 112 * 224 * 4)
+                self.d_intent_in = cuda.mem_alloc(1 * 4 * 4) 
+                self.d_output = cuda.mem_alloc(1 * 2 * 4)
+                self.bindings = [int(self.d_img_in), int(self.d_intent_in), int(self.d_output)]
 
-                _, height, width = mask.shape
-                cropped_img = TF.crop(mask, top=CROP_TOP_ROWS, left=0, height=height - CROP_TOP_ROWS, width=width)
-                resized_mask = TF.resize(cropped_img, (112, 224))
-
-                img_tensor = resized_mask.to(torch.float32).unsqueeze(0).cpu().numpy() # (1, 1, 112, 224)
-
-            # Prep Intent
-            intent_tensor = np.array([INTENT_MAP.get(self.current_intent, [1.0, 0.0, 0.0, 0.0])], dtype=np.float32) # Shape: (1, 4)
-
-            # Inference
-            if USE_TENSORRT:
-                cuda.memcpy_htod(self.d_img_in, img_tensor)
-                cuda.memcpy_htod(self.d_intent_in, intent_tensor)
-                self.context.execute_v2(bindings=self.bindings)
-                h_output = np.empty((1, 2), dtype=np.float32)
-                cuda.memcpy_dtoh(h_output, self.d_output)
-                vel_left, vel_right = h_output[0][0], h_output[0][1]
-            else:
-                ort_inputs = {
-                    self.ort_session.get_inputs()[0].name: img_tensor,
-                    self.ort_session.get_inputs()[1].name: intent_tensor
-                }
-                ort_outs = self.ort_session.run(None, ort_inputs)
-                vel_left, vel_right = ort_outs[0][0][0], ort_outs[0][0][1]
-
-            # Publish
-            cmd_msg = WheelsCmdStamped()
-            cmd_msg.header.stamp = rospy.Time.now()
-            cmd_msg.vel_left = float(vel_left)
-            cmd_msg.vel_right = float(vel_right)
-            self.cmd_pub.publish(cmd_msg)
+            # Switch UI State
+            self.active_backend = backend
+            self.is_autonomous_active = True
+            self.btn_start.setEnabled(False)
+            self.backend_combo.setEnabled(False)
+            self.btn_stop.setEnabled(True)
+            rospy.loginfo(f"Autonomous Mode STARTED with {backend}")
 
         except Exception as e:
-            rospy.logerr(f"Inference crash: {e}")
+            rospy.logerr(f"Failed to load {backend} model: {e}")
+
+    def stop_autonomous(self):
+        self.is_autonomous_active = False
+        self.btn_start.setEnabled(True)
+        self.backend_combo.setEnabled(True)
+        self.btn_stop.setEnabled(False)
+        
+        # Instantly kill motors
+        cmd_msg = WheelsCmdStamped()
+        cmd_msg.header.stamp = rospy.Time.now()
+        cmd_msg.vel_left = 0.0
+        cmd_msg.vel_right = 0.0
+        self.cmd_pub.publish(cmd_msg)
+        
+        self.motor_text.setText("Left Motor: 0.00  |  Right Motor: 0.00 (STOPPED)")
+        rospy.logwarn("Autonomous Mode STOPPED. Zero velocities sent.")
+
+    # ---------------------------------------------------------
+    # INTENT HANDLING
+    # ---------------------------------------------------------
+    def intent_cb(self, msg):
+        self.set_intent(msg.data)
+
+    def set_intent(self, intent_str):
+        if intent_str in ["straight", "left", "right", "stop"]:
+            self.current_intent = intent_str
+            self.update_intent_button_styles()
+
+    def update_intent_button_styles(self):
+        buttons = {"straight": self.btn_straight, "left": self.btn_left, 
+                   "right": self.btn_right, "stop": self.btn_stop_intent}
+        for name, btn in buttons.items():
+            if name == self.current_intent:
+                color = "#dc3545" if name == "stop" else "#007bff"
+                btn.setStyleSheet(f"background-color: {color}; color: white; font-weight: bold; padding: 8px;")
+            else:
+                btn.setStyleSheet("background-color: #f8f9fa; color: black; padding: 8px;")
+
+    # ---------------------------------------------------------
+    # MAIN ROS INFERENCE LOOP
+    # ---------------------------------------------------------
+    def image_cb(self, msg):
+        try:
+            # 1. Decode Image
+            np_arr = np.frombuffer(msg.data, np.uint8)
+            cv_image = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+            rgb_image = cv2.cvtColor(cv_image, cv2.COLOR_BGR2RGB)
+
+            ui_model_view = None
+
+            # 2. Preprocessing (Always runs to supply the UI Preview)
+            if self.skip_segmentation:
+                pil_image = Image.fromarray(rgb_image)
+                cropped_img = crop_image(pil_image)
+                img_tensor = self.transform(cropped_img).unsqueeze(0).numpy()
+                ui_model_view = cv2.resize(np.array(cropped_img), (224, 112))
+            else:
+                yolo_input = rgb_image.astype(np.float32) / 255.0
+                yolo_input = np.transpose(yolo_input, (2, 0, 1))
+                yolo_input = np.expand_dims(yolo_input, axis=0)
+
+                mask = self.yolo_session(yolo_input)[0].semantic_mask.data
+                mask = mask.unsqueeze(0)
+
+                _, height, width = mask.shape
+                cropped_mask = TF.crop(mask, top=CROP_TOP_ROWS, left=0, height=height - CROP_TOP_ROWS, width=width)
+                resized_mask = TF.resize(cropped_mask, (112, 224))
+
+                img_tensor = resized_mask.to(torch.float32).unsqueeze(0).cpu().numpy()
+                ui_model_view = (resized_mask.squeeze(0).cpu().numpy() * 255).astype(np.uint8)
+
+            vel_left, vel_right = 0.0, 0.0
+
+            # 3. Inference Gate (Only runs if START was pressed)
+            if self.is_autonomous_active:
+                intent_tensor = np.array([INTENT_MAP.get(self.current_intent, [1.0, 0.0, 0.0, 0.0])], dtype=np.float32)
+
+                if self.active_backend == "PyTorch":
+                    img_t = torch.from_numpy(img_tensor).to(self.device)
+                    intent_t = torch.from_numpy(intent_tensor).to(self.device)
+                    with torch.no_grad():
+                        output = self.pt_model(img_t, intent_t)
+                    vel_left, vel_right = output[0][0].item(), output[0][1].item()
+
+                elif self.active_backend == "TensorRT":
+                    cuda.memcpy_htod(self.d_img_in, img_tensor)
+                    cuda.memcpy_htod(self.d_intent_in, intent_tensor)
+                    self.context.execute_v2(bindings=self.bindings)
+                    h_output = np.empty((1, 2), dtype=np.float32)
+                    cuda.memcpy_dtoh(h_output, self.d_output)
+                    vel_left, vel_right = h_output[0][0], h_output[0][1]
+
+                elif self.active_backend == "ONNX Runtime":
+                    ort_inputs = {
+                        self.ort_session.get_inputs()[0].name: img_tensor,
+                        self.ort_session.get_inputs()[1].name: intent_tensor
+                    }
+                    ort_outs = self.ort_session.run(None, ort_inputs)
+                    vel_left, vel_right = ort_outs[0][0][0], ort_outs[0][0][1]
+
+                # Publish Motor Commands
+                cmd_msg = WheelsCmdStamped()
+                cmd_msg.header.stamp = rospy.Time.now()
+                cmd_msg.vel_left = float(vel_left)
+                cmd_msg.vel_right = float(vel_right)
+                self.cmd_pub.publish(cmd_msg)
+
+            # Safely relay everything to the Qt thread for live rendering
+            self.bridge.telemetry_signal.emit(rgb_image, ui_model_view, float(vel_left), float(vel_right), self.current_intent)
+
+        except Exception as e:
+            # We don't want a single frame failure to crash the node
+            pass 
+
+    def update_ui(self, raw_img, model_img, vel_left, vel_right, intent):
+        # 1. Render Raw Camera View
+        h, w, ch = raw_img.shape
+        qt_raw = QImage(raw_img.data, w, h, ch * w, QImage.Format_RGB888)
+        self.live_label.setPixmap(QPixmap.fromImage(qt_raw).scaled(self.live_label.width(), self.live_label.height(), Qt.KeepAspectRatio))
+
+        # 2. Render Network Input Image
+        if len(model_img.shape) == 2:  # Grayscale Mask
+            mh, mw = model_img.shape
+            qt_model = QImage(model_img.data, mw, mh, mw, QImage.Format_Indexed8)
+        else:  # RGB Cropped Image
+            mh, mw, mch = model_img.shape
+            qt_model = QImage(model_img.data, mw, mh, mch * mw, QImage.Format_RGB888)
+            
+        self.model_label.setPixmap(QPixmap.fromImage(qt_model).scaled(self.model_label.width(), self.model_label.height(), Qt.KeepAspectRatio))
+
+        # 3. Update Text Metrics
+        if self.is_autonomous_active:
+            self.motor_text.setText(f"Left Motor: {vel_left:+.3f}  |  Right Motor: {vel_right:+.3f} [RUNNING: {self.active_backend}]")
+
+    def keyPressEvent(self, event):
+        if event.key() == Qt.Key_I: self.set_intent("straight")
+        elif event.key() == Qt.Key_J: self.set_intent("left")
+        elif event.key() == Qt.Key_L: self.set_intent("right")
+        elif event.key() == Qt.Key_K: self.set_intent("stop")
+
+    def mousePressEvent(self, event):
+        self.setFocus()
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description="Autonomous Driver Node")
-    parser.add_argument("--skip_segmentation", action="store_true", help="Skip YOLO segmentation and use original PilotNet")
+    parser = argparse.ArgumentParser(description="Autonomous Driver Dashboard Node")
+    parser.add_argument("--skip_segmentation", action="store_true", help="Skip YOLO segmentation and view PilotNet cropping directly")
     args, unknown = parser.parse_known_args(rospy.myargv()[1:])
     
-    node = AutonomousDriver(skip_segmentation=args.skip_segmentation)
-    rospy.spin()
+    app = QApplication(sys.argv)
+    driver_ui = AutonomousDriverUI(skip_segmentation=args.skip_segmentation)
+    driver_ui.show()
+    
+    sys.exit(app.exec_())
