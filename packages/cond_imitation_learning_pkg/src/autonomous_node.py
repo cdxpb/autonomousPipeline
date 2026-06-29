@@ -285,7 +285,7 @@ class AutonomousDriverUI(QMainWindow):
             np_arr = np.frombuffer(msg.data, np.uint8)
             cv_image = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
             
-            if cv_image is None:
+            if cv_image is None or cv_image.size == 0:
                 rospy.logwarn_throttle(2.0, "Received empty or corrupted image frame.")
                 return
 
@@ -297,14 +297,20 @@ class AutonomousDriverUI(QMainWindow):
                 pil_image = Image.fromarray(rgb_image)
                 cropped_img = crop_image(pil_image)
                 img_tensor = self.transform(cropped_img).unsqueeze(0).numpy()
-                ui_model_view = cv2.resize(np.array(cropped_img), (224, 112))
+                
+                # Safe OpenCV Resize for UI preview
+                if cropped_img.size[0] > 0 and cropped_img.size[1] > 0:
+                    ui_model_view = cv2.resize(np.array(cropped_img), (224, 112))
+                else:
+                    ui_model_view = np.zeros((112, 224, 3), dtype=np.uint8)
             else:
                 yolo_input = rgb_image.astype(np.float32) / 255.0
                 yolo_input = np.transpose(yolo_input, (2, 0, 1))
                 yolo_input = np.expand_dims(yolo_input, axis=0)
 
-                # verbose=False stops YOLO from printing to console on every frame
-                yolo_results = self.yolo_session(yolo_input, verbose=False)
+                yolo_input_tensor = torch.from_numpy(yolo_input)
+                
+                yolo_results = self.yolo_session(yolo_input_tensor, verbose=False)
                 mask = yolo_results[0].semantic_mask.data
                 mask = mask.unsqueeze(0)
 
@@ -317,7 +323,7 @@ class AutonomousDriverUI(QMainWindow):
 
             vel_left, vel_right = 0.0, 0.0
 
-            # 3. Inference Gate
+            # 3. Inference Gate (Only runs if "START" is active)
             if self.is_autonomous_active:
                 intent_tensor = np.array([INTENT_MAP.get(self.current_intent, [1.0, 0.0, 0.0, 0.0])], dtype=np.float32)
 
@@ -337,26 +343,59 @@ class AutonomousDriverUI(QMainWindow):
                     vel_left, vel_right = h_output[0][0], h_output[0][1]
 
                 elif self.active_backend == "ONNX Runtime":
-                    ort_inputs = {
-                        self.ort_session.get_inputs()[0].name: img_tensor,
-                        self.ort_session.get_inputs()[1].name: intent_tensor
-                    }
-                    ort_outs = self.ort_session.run(None, ort_inputs)
-                    vel_left, vel_right = ort_outs[0][0][0], ort_outs[0][0][1]
+                    ort_inputs = {}
+                    
+                    # Ensure intent is strictly a 2D array: Shape (1, 4)
+                    raw_intent = INTENT_MAP.get(self.current_intent, [1.0, 0.0, 0.0, 0.0])
+                    # Catch if the map accidentally returns a nested list
+                    if isinstance(raw_intent, list) and isinstance(raw_intent[0], list):
+                        raw_intent = raw_intent[0]
+                    intent_tensor = np.array([raw_intent], dtype=np.float32)
 
+                    for ort_in in self.ort_session.get_inputs():
+                        expected_shape = ort_in.shape
+                        in_name = ort_in.name
+                        in_type = ort_in.type
+                        
+                        # 1. Identify Intent (Usually 1D or 2D, or named 'intent'/'cmd')
+                        if (expected_shape and len(expected_shape) <= 2) or any(k in in_name.lower() for k in ['intent', 'cmd', 'command']):
+                            # Match the type ONNX expects (Fallback to float32)
+                            if 'int64' in in_type:
+                                ort_inputs[in_name] = intent_tensor.astype(np.int64)
+                            else:
+                                ort_inputs[in_name] = intent_tensor.astype(np.float32)
+                                
+                        # 2. Identify Image (Usually 4D, or named 'input'/'img'/'x')
+                        else:
+                            if 'float64' in in_type:
+                                ort_inputs[in_name] = img_tensor.astype(np.float64)
+                            else:
+                                ort_inputs[in_name] = img_tensor.astype(np.float32)
+
+                    try:
+                        ort_outs = self.ort_session.run(None, ort_inputs)
+                        vel_left = float(ort_outs[0][0][0]) 
+                        vel_right = float(ort_outs[0][0][1])
+                    except Exception as e:
+                        # Log the exact dictionary mapping we attempted vs what ONNX wanted
+                        mapping_debug = {k: v.shape for k, v in ort_inputs.items()}
+                        expected_debug = {i.name: i.shape for i in self.ort_session.get_inputs()}
+                        rospy.logerr(f"CRITICAL ONNX MISMATCH! We sent: {mapping_debug} | ONNX Expected: {expected_debug}")
+                        raise e # Re-raise to trigger the throttle block below
+
+                # Publish Motor Commands
                 cmd_msg = WheelsCmdStamped()
                 cmd_msg.header.stamp = rospy.Time.now()
                 cmd_msg.vel_left = float(vel_left)
                 cmd_msg.vel_right = float(vel_right)
                 self.cmd_pub.publish(cmd_msg)
 
-            # Safely copy numpy arrays before emitting to PyQt to prevent memory corruption
-            self.bridge.telemetry_signal.emit(rgb_image.copy(), ui_model_view.copy(), float(vel_left), float(vel_right), self.current_intent)
+            # Safely relay everything to the Qt thread for live rendering
+            if ui_model_view is not None:
+                self.bridge.telemetry_signal.emit(rgb_image.copy(), ui_model_view.copy(), float(vel_left), float(vel_right), self.current_intent)
 
         except Exception as e:
-            # We use logerr_throttle so it prints the error once every 2 seconds instead of spamming 30 times a second
             rospy.logerr_throttle(2.0, f"Image Processing Error: {e}")
-
     def update_ui(self, raw_img, model_img, vel_left, vel_right, intent):
         # 1. Render Raw Camera View
         h, w, ch = raw_img.shape
