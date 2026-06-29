@@ -52,11 +52,12 @@ class TelemetryBridge(QObject):
     telemetry_signal = pyqtSignal(np.ndarray, np.ndarray, float, float, str)
 
 class AutonomousDriverUI(QMainWindow):
-    def __init__(self, skip_segmentation=False):
+    def __init__(self, approach=2):
         super().__init__()
         rospy.init_node('autonomous_driver_ui_node', anonymous=False)
         self.veh = os.environ.get('VEHICLE_NAME', 'golduck')
-        self.skip_segmentation = skip_segmentation
+        self.approach = approach
+        self.skip_segmentation = (self.approach == 0)
         self.current_intent = "straight"
         
         # State Flags
@@ -65,10 +66,13 @@ class AutonomousDriverUI(QMainWindow):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
         # Model Paths
-        if self.skip_segmentation:
+        if self.approach == 0:
             self.model_path = "../autonomouspipeline/models/pilotnet/best_model"
-        else:
+        elif self.approach == 2:
             self.model_path = "../autonomouspipeline/models/pilotnet/segPilot_approach2"
+            self.yolo_path = "../autonomouspipeline/models/yolo_model/yolo_model.onnx"
+        elif self.approach == 3:
+            self.model_path = "../autonomouspipeline/models/pilotnet/segClassification_approach3"
             self.yolo_path = "../autonomouspipeline/models/yolo_model/yolo_model.onnx"
 
         self.transform = get_eval_transforms()
@@ -179,6 +183,16 @@ class AutonomousDriverUI(QMainWindow):
         self.update_intent_button_styles()
         self.setFocusPolicy(Qt.StrongFocus)
 
+    def action_to_vel(self, action_idx):
+        # 0: straight, 1: left, 2: right, 3: stop
+        mapping = {
+            0: (0.15, 0.2),
+            1: (0.15, 0.2),
+            2: (0.2, 0.15),
+            3: (0.0, 0.0)
+        }
+        return mapping.get(action_idx, (0.0, 0.0))
+
     # ---------------------------------------------------------
     # STATE CONTROL
     # ---------------------------------------------------------
@@ -189,8 +203,12 @@ class AutonomousDriverUI(QMainWindow):
         try:
             if backend == "PyTorch":
                 # Assumes you have a TorchScript exported model (.pt) or you can drop your PilotNet class here
-                from pilotnet import ConditionalPilotNet
-                self.pt_model = ConditionalPilotNet(in_channels=3 if self.skip_segmentation else 1).to(self.device)
+                if self.approach == 3:
+                    from pilotnet_v3 import ConditionalPilotNet
+                    self.pt_model = ConditionalPilotNet().to(self.device)
+                else:
+                    from pilotnet import ConditionalPilotNet
+                    self.pt_model = ConditionalPilotNet(in_channels=3 if self.skip_segmentation else 1).to(self.device)
                 self.pt_model.load_state_dict(torch.load(f"{self.model_path}.pt", map_location=self.device))
                 self.pt_model.eval()
 
@@ -205,7 +223,7 @@ class AutonomousDriverUI(QMainWindow):
                 channels = 3 if self.skip_segmentation else 1
                 self.d_img_in = cuda.mem_alloc(1 * channels * 112 * 224 * 4)
                 self.d_intent_in = cuda.mem_alloc(1 * 4 * 4) 
-                self.d_output = cuda.mem_alloc(1 * 2 * 4)
+                self.d_output = cuda.mem_alloc(1 * (4 if self.approach == 3 else 2) * 4)
                 self.bindings = [int(self.d_img_in), int(self.d_intent_in), int(self.d_output)]
 
             # Switch UI State
@@ -275,7 +293,7 @@ class AutonomousDriverUI(QMainWindow):
             channels = 3 if self.skip_segmentation else 1
             self.d_img_in = cuda.mem_alloc(1 * channels * 112 * 224 * 4)
             self.d_intent_in = cuda.mem_alloc(1 * 4 * 4) 
-            self.d_output = cuda.mem_alloc(1 * 2 * 4)
+            self.d_output = cuda.mem_alloc(1 * (4 if self.approach == 3 else 2) * 4)
             self.bindings = [int(self.d_img_in), int(self.d_intent_in), int(self.d_output)]
         else:
             self.ort_session = ort.InferenceSession(f"{self.model_path}.onnx")
@@ -331,15 +349,23 @@ class AutonomousDriverUI(QMainWindow):
                     intent_t = torch.from_numpy(intent_tensor).to(self.device)
                     with torch.no_grad():
                         output = self.pt_model(img_t, intent_t)
-                    vel_left, vel_right = output[0][0].item(), output[0][1].item()
+                    if self.approach == 3:
+                        pred_action = torch.argmax(output, dim=1).cpu().item()
+                        vel_left, vel_right = self.action_to_vel(pred_action)
+                    else:
+                        vel_left, vel_right = output[0][0].item(), output[0][1].item()
 
                 elif self.active_backend == "TensorRT":
                     cuda.memcpy_htod(self.d_img_in, img_tensor)
                     cuda.memcpy_htod(self.d_intent_in, intent_tensor)
                     self.context.execute_v2(bindings=self.bindings)
-                    h_output = np.empty((1, 2), dtype=np.float32)
+                    h_output = np.empty((1, 4 if self.approach == 3 else 2), dtype=np.float32)
                     cuda.memcpy_dtoh(h_output, self.d_output)
-                    vel_left, vel_right = h_output[0][0], h_output[0][1]
+                    if self.approach == 3:
+                        pred_action = np.argmax(h_output[0])
+                        vel_left, vel_right = self.action_to_vel(pred_action)
+                    else:
+                        vel_left, vel_right = h_output[0][0], h_output[0][1]
 
                 elif self.active_backend == "ONNX Runtime":
                     ort_inputs = {}
@@ -373,8 +399,12 @@ class AutonomousDriverUI(QMainWindow):
 
                     try:
                         ort_outs = self.ort_session.run(None, ort_inputs)
-                        vel_left = float(ort_outs[0][0][0]) 
-                        vel_right = float(ort_outs[0][0][1])
+                        if self.approach == 3:
+                            pred_action = np.argmax(ort_outs[0][0])
+                            vel_left, vel_right = self.action_to_vel(pred_action)
+                        else:
+                            vel_left = float(ort_outs[0][0][0]) 
+                            vel_right = float(ort_outs[0][0][1])
                     except Exception as e:
                         # Log the exact dictionary mapping we attempted vs what ONNX wanted
                         mapping_debug = {k: v.shape for k, v in ort_inputs.items()}
@@ -426,11 +456,16 @@ class AutonomousDriverUI(QMainWindow):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Autonomous Driver Dashboard Node")
-    parser.add_argument("--skip_segmentation", action="store_true", help="Skip YOLO segmentation and view PilotNet cropping directly")
+    parser.add_argument("--approach", type=int, choices=[0, 2, 3], default=2, help="0: skip segmentation, 2: segmentation + regression, 3: segmentation + classification")
+    parser.add_argument("--skip_segmentation", action="store_true", help="Deprecated. Use --approach 0 instead.")
     args, unknown = parser.parse_known_args(rospy.myargv()[1:])
     
+    approach = args.approach
+    if args.skip_segmentation:
+        approach = 0
+    
     app = QApplication(sys.argv)
-    driver_ui = AutonomousDriverUI(skip_segmentation=args.skip_segmentation)
+    driver_ui = AutonomousDriverUI(approach=approach)
     driver_ui.show()
     
     sys.exit(app.exec_())
