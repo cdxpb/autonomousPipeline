@@ -63,7 +63,6 @@ class DAggerNode:
 
     def keys_cb(self, msg):
         try:
-            print(f"--- DEBUG: keys_cb triggered with data: '{msg.data}' ---", flush=True)
             self.human_keys = [int(x) for x in msg.data.split(',')]
             # If any key is pressed, human is intervening
             self.is_human_intervening = sum(self.human_keys) > 0
