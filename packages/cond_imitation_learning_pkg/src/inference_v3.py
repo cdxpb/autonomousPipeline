@@ -4,6 +4,17 @@ import os
 from PIL import Image
 
 
+def crop_image(pil_image):
+    width, height = pil_image.size
+    # Ensure cropping does not result in negative height
+    crop_height = height - CROP_TOP_ROWS
+    if crop_height <= 0:
+        # If the image is too short, just return it or handle as an error
+        print(f"Warning: Image height {height} is too small for CROP_TOP_ROWS {CROP_TOP_ROWS}. Not cropping.")
+        return pil_image
+    return pil_image.crop((0, CROP_TOP_ROWS, width, height))
+
+
 def load_yolo(model_folder: str):
     """
     Loads the YOLO segmentation model from the specified folder for inference.
