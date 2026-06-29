@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import sys
 import os
+import json
 import argparse
 import rospy
 import cv2
@@ -15,8 +16,8 @@ except ImportError:
     pass
 
 # ROS Messages
+from duckietown_msgs.msg import Twist2DStamped, WheelsCmdStamped
 from sensor_msgs.msg import CompressedImage
-from duckietown_msgs.msg import WheelsCmdStamped
 from std_msgs.msg import String
 
 # PyQt5 UI Components
@@ -52,14 +53,23 @@ class TelemetryBridge(QObject):
     telemetry_signal = pyqtSignal(np.ndarray, np.ndarray, float, float, str)
 
 class AutonomousDriverUI(QMainWindow):
-    def __init__(self, approach=2):
+    def __init__(self, approach=2, output_mode=None):
         super().__init__()
         rospy.init_node('autonomous_driver_ui_node', anonymous=False)
         self.veh = os.environ.get('VEHICLE_NAME', 'golduck')
         self.approach = approach
+        
+        if output_mode is None:
+            self.output_mode = "twist" if self.approach == 3 else "wheels"
+        else:
+            self.output_mode = output_mode
+
         self.skip_segmentation = (self.approach == 0)
         self.current_intent = "straight"
         
+        self.config_path = "/dataset/tuning_config.json"
+        self.tuning = self.load_tuning_config()
+
         # State Flags
         self.is_autonomous_active = False
         self.active_backend = None
@@ -90,9 +100,27 @@ class AutonomousDriverUI(QMainWindow):
             self.yolo_session = YOLO(self.yolo_path, task='semantic')
 
         # ROS Publishers & Subscribers``
-        self.cmd_pub = rospy.Publisher(f"/{self.veh}/wheels_driver_node/wheels_cmd", WheelsCmdStamped, queue_size=1, tcp_nodelay=True)
+        if self.output_mode == "twist":
+            self.cmd_pub = rospy.Publisher(f"/{self.veh}/car_cmd_switch_node/cmd", Twist2DStamped, queue_size=1, tcp_nodelay=True)
+        else:
+            self.cmd_pub = rospy.Publisher(f"/{self.veh}/wheels_driver_node/wheels_cmd", WheelsCmdStamped, queue_size=1, tcp_nodelay=True)
         self.image_sub = rospy.Subscriber(f"/{self.veh}/camera_node/image/compressed", CompressedImage, self.image_cb, queue_size=1, buff_size=2**24, tcp_nodelay=True)
         self.intent_sub = rospy.Subscriber(f"/{self.veh}/data_collector/intent", String, self.intent_cb)
+
+    def load_tuning_config(self):
+        default_config = {
+            "v_fwd": 0.30, "v_rev": -0.5, 
+            "v_bump_a": 0.1, "omega_a": 3.0,
+            "v_bump_d": 0.1, "omega_d": 5.0
+        }
+        # try:
+        #     if os.path.exists(self.config_path):
+        #         with open(self.config_path, 'r') as f:
+        #             saved = json.load(f)
+        #             default_config.update(saved)
+        # except Exception:
+        #     pass
+        return default_config
 
     def init_ui(self):
         self.setWindowTitle(f"Autonomous Dashboard — {self.veh}")
@@ -149,7 +177,10 @@ class AutonomousDriverUI(QMainWindow):
         telemetry_group = QGroupBox("Network Predictions & State")
         telemetry_layout = QHBoxLayout()
 
-        self.motor_text = QLabel("Left Motor: 0.00  |  Right Motor: 0.00 (IDLE)")
+        if self.output_mode == "twist":
+            self.motor_text = QLabel("v: 0.00  |  omega: 0.00 (IDLE)")
+        else:
+            self.motor_text = QLabel("Left Motor: 0.00  |  Right Motor: 0.00 (IDLE)")
         self.motor_text.setStyleSheet("font-family: monospace; font-size: 18px; font-weight: bold; color: #2b2b2b;")
         self.motor_text.setAlignment(Qt.AlignCenter)
         telemetry_layout.addWidget(self.motor_text)
@@ -192,6 +223,17 @@ class AutonomousDriverUI(QMainWindow):
             3: (0.0, 0.0)
         }
         return mapping.get(action_idx, (0.0, 0.0))
+
+    def action_to_twist(self, action_idx):
+        # 0: straight, 1: left, 2: right, 3: stop
+        if action_idx == 0:
+            return self.tuning["v_fwd"], 0.0
+        elif action_idx == 1:
+            return self.tuning["v_bump_a"], self.tuning["omega_a"]
+        elif action_idx == 2:
+            return self.tuning["v_bump_d"], -self.tuning["omega_d"]
+        else: # 3: stop
+            return 0.0, 0.0
 
     # ---------------------------------------------------------
     # STATE CONTROL
@@ -244,13 +286,21 @@ class AutonomousDriverUI(QMainWindow):
         self.btn_stop.setEnabled(False)
         
         # Instantly kill motors
-        cmd_msg = WheelsCmdStamped()
-        cmd_msg.header.stamp = rospy.Time.now()
-        cmd_msg.vel_left = 0.0
-        cmd_msg.vel_right = 0.0
-        self.cmd_pub.publish(cmd_msg)
-        
-        self.motor_text.setText("Left Motor: 0.00  |  Right Motor: 0.00 (STOPPED)")
+        if self.output_mode == "twist":
+            cmd_msg = Twist2DStamped()
+            cmd_msg.header.stamp = rospy.Time.now()
+            cmd_msg.v = 0.0
+            cmd_msg.omega = 0.0
+            self.cmd_pub.publish(cmd_msg)
+            self.motor_text.setText("v: 0.00  |  omega: 0.00 (STOPPED)")
+        else:
+            cmd_msg = WheelsCmdStamped()
+            cmd_msg.header.stamp = rospy.Time.now()
+            cmd_msg.vel_left = 0.0
+            cmd_msg.vel_right = 0.0
+            self.cmd_pub.publish(cmd_msg)
+            self.motor_text.setText("Left Motor: 0.00  |  Right Motor: 0.00 (STOPPED)")
+            
         rospy.logwarn("Autonomous Mode STOPPED. Zero velocities sent.")
 
     # ---------------------------------------------------------
@@ -338,7 +388,7 @@ class AutonomousDriverUI(QMainWindow):
                 img_tensor = TF.to_tensor(resized_mask_pil).unsqueeze(0).numpy()
                 ui_model_view = (np.array(resized_mask_pil) * 85).astype(np.uint8)
 
-            vel_left, vel_right = 0.0, 0.0
+            out1, out2 = 0.0, 0.0
 
             # 3. Inference Gate (Only runs if "START" is active)
             if self.is_autonomous_active:
@@ -351,9 +401,12 @@ class AutonomousDriverUI(QMainWindow):
                         output = self.pt_model(img_t, intent_t)
                     if self.approach == 3:
                         pred_action = torch.argmax(output, dim=1).cpu().item()
-                        vel_left, vel_right = self.action_to_vel(pred_action)
+                        if self.output_mode == "twist":
+                            out1, out2 = self.action_to_twist(pred_action)
+                        else:
+                            out1, out2 = self.action_to_vel(pred_action)
                     else:
-                        vel_left, vel_right = output[0][0].item(), output[0][1].item()
+                        out1, out2 = output[0][0].item(), output[0][1].item()
 
                 elif self.active_backend == "TensorRT":
                     cuda.memcpy_htod(self.d_img_in, img_tensor)
@@ -363,9 +416,12 @@ class AutonomousDriverUI(QMainWindow):
                     cuda.memcpy_dtoh(h_output, self.d_output)
                     if self.approach == 3:
                         pred_action = np.argmax(h_output[0])
-                        vel_left, vel_right = self.action_to_vel(pred_action)
+                        if self.output_mode == "twist":
+                            out1, out2 = self.action_to_twist(pred_action)
+                        else:
+                            out1, out2 = self.action_to_vel(pred_action)
                     else:
-                        vel_left, vel_right = h_output[0][0], h_output[0][1]
+                        out1, out2 = h_output[0][0], h_output[0][1]
 
                 elif self.active_backend == "ONNX Runtime":
                     ort_inputs = {}
@@ -401,10 +457,13 @@ class AutonomousDriverUI(QMainWindow):
                         ort_outs = self.ort_session.run(None, ort_inputs)
                         if self.approach == 3:
                             pred_action = np.argmax(ort_outs[0][0])
-                            vel_left, vel_right = self.action_to_vel(pred_action)
+                            if self.output_mode == "twist":
+                                out1, out2 = self.action_to_twist(pred_action)
+                            else:
+                                out1, out2 = self.action_to_vel(pred_action)
                         else:
-                            vel_left = float(ort_outs[0][0][0]) 
-                            vel_right = float(ort_outs[0][0][1])
+                            out1 = float(ort_outs[0][0][0]) 
+                            out2 = float(ort_outs[0][0][1])
                     except Exception as e:
                         # Log the exact dictionary mapping we attempted vs what ONNX wanted
                         mapping_debug = {k: v.shape for k, v in ort_inputs.items()}
@@ -413,19 +472,26 @@ class AutonomousDriverUI(QMainWindow):
                         raise e # Re-raise to trigger the throttle block below
 
                 # Publish Motor Commands
-                cmd_msg = WheelsCmdStamped()
-                cmd_msg.header.stamp = rospy.Time.now()
-                cmd_msg.vel_left = float(vel_left)
-                cmd_msg.vel_right = float(vel_right)
-                self.cmd_pub.publish(cmd_msg)
+                if self.output_mode == "twist":
+                    cmd_msg = Twist2DStamped()
+                    cmd_msg.header.stamp = rospy.Time.now()
+                    cmd_msg.v = float(out1)
+                    cmd_msg.omega = float(out2)
+                    self.cmd_pub.publish(cmd_msg)
+                else:
+                    cmd_msg = WheelsCmdStamped()
+                    cmd_msg.header.stamp = rospy.Time.now()
+                    cmd_msg.vel_left = float(out1)
+                    cmd_msg.vel_right = float(out2)
+                    self.cmd_pub.publish(cmd_msg)
 
             # Safely relay everything to the Qt thread for live rendering
             if ui_model_view is not None:
-                self.bridge.telemetry_signal.emit(rgb_image.copy(), ui_model_view.copy(), float(vel_left), float(vel_right), self.current_intent)
+                self.bridge.telemetry_signal.emit(rgb_image.copy(), ui_model_view.copy(), float(out1), float(out2), self.current_intent)
 
         except Exception as e:
             rospy.logerr_throttle(2.0, f"Image Processing Error: {e}")
-    def update_ui(self, raw_img, model_img, vel_left, vel_right, intent):
+    def update_ui(self, raw_img, model_img, out1, out2, intent):
         # 1. Render Raw Camera View
         h, w, ch = raw_img.shape
         qt_raw = QImage(raw_img.data, w, h, ch * w, QImage.Format_RGB888)
@@ -443,7 +509,10 @@ class AutonomousDriverUI(QMainWindow):
 
         # 3. Update Text Metrics
         if self.is_autonomous_active:
-            self.motor_text.setText(f"Left Motor: {vel_left:+.3f}  |  Right Motor: {vel_right:+.3f} [RUNNING: {self.active_backend}]")
+            if self.output_mode == "twist":
+                self.motor_text.setText(f"v: {out1:+.3f}  |  omega: {out2:+.3f} [RUNNING: {self.active_backend}]")
+            else:
+                self.motor_text.setText(f"Left Motor: {out1:+.3f}  |  Right Motor: {out2:+.3f} [RUNNING: {self.active_backend}]")
 
     def keyPressEvent(self, event):
         if event.key() == Qt.Key_I: self.set_intent("straight")
@@ -458,6 +527,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Autonomous Driver Dashboard Node")
     parser.add_argument("--approach", type=int, choices=[0, 2, 3], default=2, help="0: skip segmentation, 2: segmentation + regression, 3: segmentation + classification")
     parser.add_argument("--skip_segmentation", action="store_true", help="Deprecated. Use --approach 0 instead.")
+    parser.add_argument("--output_mode", type=str, choices=["twist", "wheels"], default=None, help="Output mode for driving commands. Defaults to wheels for approach 0/2, twist for approach 3.")
     args, unknown = parser.parse_known_args(rospy.myargv()[1:])
     
     approach = args.approach
@@ -465,7 +535,7 @@ if __name__ == '__main__':
         approach = 0
     
     app = QApplication(sys.argv)
-    driver_ui = AutonomousDriverUI(approach=approach)
+    driver_ui = AutonomousDriverUI(approach=approach, output_mode=args.output_mode)
     driver_ui.show()
     
     sys.exit(app.exec_())
