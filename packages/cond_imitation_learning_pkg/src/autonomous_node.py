@@ -68,7 +68,7 @@ class AutonomousDriverUI(QMainWindow):
         if self.skip_segmentation:
             self.model_path = "../autonomouspipeline/models/pilotnet/best_model"
         else:
-            self.model_path = "../autonomouspipeline/models/pilotnet/segPilot"
+            self.model_path = "../autonomouspipeline/models/pilotnet/segPilot_approach2"
             self.yolo_path = "../autonomouspipeline/models/yolo_model/yolo_model.onnx"
 
         self.transform = get_eval_transforms()
@@ -83,9 +83,9 @@ class AutonomousDriverUI(QMainWindow):
         # Always load YOLO if not skipping, so we can preview the mask even when stopped
         if not self.skip_segmentation:
             rospy.loginfo("UI: Loading YOLO Semantic Segmentation model for previews...")
-            self.yolo_session = YOLO(self.yolo_path, task="semantic")
+            self.yolo_session = YOLO(self.yolo_path, task='semantic')
 
-        # ROS Publishers & Subscribers
+        # ROS Publishers & Subscribers``
         self.cmd_pub = rospy.Publisher(f"/{self.veh}/wheels_driver_node/wheels_cmd", WheelsCmdStamped, queue_size=1, tcp_nodelay=True)
         self.image_sub = rospy.Subscriber(f"/{self.veh}/camera_node/image/compressed", CompressedImage, self.image_cb, queue_size=1, buff_size=2**24, tcp_nodelay=True)
         self.intent_sub = rospy.Subscriber(f"/{self.veh}/data_collector/intent", String, self.intent_cb)
@@ -189,7 +189,9 @@ class AutonomousDriverUI(QMainWindow):
         try:
             if backend == "PyTorch":
                 # Assumes you have a TorchScript exported model (.pt) or you can drop your PilotNet class here
-                self.pt_model = torch.jit.load(f"{self.model_path}.pt", map_location=self.device)
+                from pilotnet import ConditionalPilotNet
+                self.pt_model = ConditionalPilotNet(in_channels=3 if self.skip_segmentation else 1).to(self.device)
+                self.pt_model.load_state_dict(torch.load(f"{self.model_path}.pt", map_location=self.device))
                 self.pt_model.eval()
 
             elif backend == "ONNX Runtime":
@@ -304,22 +306,19 @@ class AutonomousDriverUI(QMainWindow):
                 else:
                     ui_model_view = np.zeros((112, 224, 3), dtype=np.uint8)
             else:
-                yolo_input = rgb_image.astype(np.float32) / 255.0
-                yolo_input = np.transpose(yolo_input, (2, 0, 1))
-                yolo_input = np.expand_dims(yolo_input, axis=0)
+                pil_image = Image.fromarray(rgb_image)
 
-                yolo_input_tensor = torch.from_numpy(yolo_input)
-                
-                yolo_results = self.yolo_session(yolo_input_tensor, verbose=False)
-                mask = yolo_results[0].semantic_mask.data
-                mask = mask.unsqueeze(0)
+                with torch.no_grad():
+                    yolo_results = self.yolo_session(pil_image, verbose=False)
 
-                _, height, width = mask.shape
-                cropped_mask = TF.crop(mask, top=CROP_TOP_ROWS, left=0, height=height - CROP_TOP_ROWS, width=width)
-                resized_mask = TF.resize(cropped_mask, (112, 224))
+                mask = yolo_results[0].semantic_mask.data.cpu()
+                mask_pil = Image.fromarray(mask.numpy())
 
-                img_tensor = resized_mask.to(torch.float32).unsqueeze(0).cpu().numpy()
-                ui_model_view = (resized_mask.squeeze(0).cpu().numpy() * 255).astype(np.uint8)
+                cropped_mask_pil = crop_image(mask_pil)
+                resized_mask_pil = cropped_mask_pil.resize((224, 112), Image.NEAREST)
+
+                img_tensor = TF.to_tensor(resized_mask_pil).unsqueeze(0).numpy()
+                ui_model_view = (np.array(resized_mask_pil) * 85).astype(np.uint8)
 
             vel_left, vel_right = 0.0, 0.0
 
