@@ -30,14 +30,14 @@ Open your terminal in the project root.
    `dts devel build -f`
 
 3. Run the container with native X11 forwarding. Replace <ROBOT_NAME> with your hostname (e.g., golduck):  
-   `dts devel run -X --robot <ROBOT_NAME> --cmd bash`
+   dts devel run -X --robot duckiexp --cmd bash
 
 ## 3. Execute Nodes
 
 Inside the container terminal run the following commands:
    ```
    source /code/catkin_ws/devel/setup.bash
-   rosrun cond_imitation_learning_pkg autonomous_node.py
+   rosrun cond_imitation_learning_pkg autonomous_node.py --approach 3 --output_mode wheels
    ```
 
 To hack into another shell:
