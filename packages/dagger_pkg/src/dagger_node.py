@@ -9,7 +9,7 @@ from PIL import Image
 import onnxruntime as ort
 
 from sensor_msgs.msg import CompressedImage
-from duckietown_msgs.msg import WheelsCmdStamped
+from duckietown_msgs.msg import Twist2DStamped
 from std_msgs.msg import String
 
 import sys
@@ -49,7 +49,7 @@ class DAggerNode:
         self.omega_turn = 5.0
 
         # --- Pubs & Subs ---
-        self.cmd_pub = rospy.Publisher(f"/{self.veh}/wheels_driver_node/wheels_cmd", WheelsCmdStamped, queue_size=1, tcp_nodelay=True)
+        self.cmd_pub = rospy.Publisher(f"/{self.veh}/car_cmd_switch_node/cmd", Twist2DStamped, queue_size=1, tcp_nodelay=True)
         
         # Listen to UI node for intent and interventions
         rospy.Subscriber(f"/{self.veh}/data_collector/intent", String, self.intent_cb)
@@ -69,18 +69,14 @@ class DAggerNode:
         except Exception as e:
             rospy.logerr(f"[DAgger] Error parsing keys: {e}. Received data: {msg.data}")
 
-    def calculate_human_velocities(self):
+    def calculate_human_commands(self):
         v = 0.0
         omega = 0.0
         if self.human_keys[0]: v += self.v_fwd           # W
         if self.human_keys[2]: v -= self.v_fwd           # S
         if self.human_keys[1]: omega += self.omega_turn  # A
         if self.human_keys[3]: omega -= self.omega_turn  # D
-
-        # Standard diff-drive kinematics mapping (simplified)
-        vel_left = v - (omega * 0.5)
-        vel_right = v + (omega * 0.5)
-        return vel_left, vel_right
+        return v, omega
 
     def image_cb(self, msg):
         timestamp = msg.header.stamp.to_sec()
@@ -93,24 +89,24 @@ class DAggerNode:
 
         # Control routing
         if self.is_human_intervening:
-            # === DAgger INTERVENTION LOGIC ===
-            vel_left, vel_right = self.calculate_human_velocities()
+            # --- DAgger INTERVENTION LOGIC ---
+            v, omega = self.calculate_human_commands()
             
             # Save frame
             img_filename = f"{timestamp:.4f}.jpg"
             img_filepath = os.path.join(self.img_dir, img_filename)
             cv2.imwrite(img_filepath, cv_image)
 
-            # Log correction
+            # Log correction (CSV headers need to match v and omega if retraining)
             with open(self.csv_path, 'a', newline='') as f:
                 writer = csv.writer(f)
-                row = [timestamp, img_filename, vel_left, vel_right, self.current_intent] + self.human_keys
+                row = [timestamp, img_filename, v, omega, self.current_intent] + self.human_keys
                 writer.writerow(row)
             
             rospy.loginfo_throttle(1.0, "[DAgger] HUMAN OVERRIDE - Logging Correction!")
 
         else:
-            # === AUTONOMOUS LOGIC ===
+            # --- AUTONOMOUS LOGIC ---
             img_tensor = self.transform(cropped_img).unsqueeze(0).numpy()
             intent_tensor = np.array([INTENT_MAP.get(self.current_intent, [1.0, 0.0, 0.0, 0.0])], dtype=np.float32)
 
@@ -119,13 +115,14 @@ class DAggerNode:
                 self.ort_session.get_inputs()[1].name: intent_tensor
             }
             ort_outs = self.ort_session.run(None, ort_inputs)
-            vel_left, vel_right = ort_outs[0][0][0], ort_outs[0][0][1]
+            # Interpret network outputs directly as high-level commands
+            v, omega = ort_outs[0][0][0], ort_outs[0][0][1]
 
-        # Publish wheels command
-        cmd_msg = WheelsCmdStamped()
+        # Publish high-level Twist command to utilize Duckiebot calibration
+        cmd_msg = Twist2DStamped()
         cmd_msg.header.stamp = rospy.Time.now()
-        cmd_msg.vel_left = float(vel_left)
-        cmd_msg.vel_right = float(vel_right)
+        cmd_msg.v = float(v)
+        cmd_msg.omega = float(omega)
         self.cmd_pub.publish(cmd_msg)
 
 if __name__ == '__main__':
