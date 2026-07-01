@@ -82,7 +82,7 @@ class AutonomousDriverUI(QMainWindow):
             self.model_path = "../autonomouspipeline/models/pilotnet/segPilot_approach2"
             self.yolo_path = "../autonomouspipeline/models/yolo_model/yolo_model.onnx"
         elif self.approach == 3:
-            self.model_path = "../autonomouspipeline/models/pilotnet/segClassification_approach3"
+            self.model_path = "../autonomouspipeline/models/pilotnet/best_model_regNhead"
             self.yolo_path = "../autonomouspipeline/models/yolo_model/yolo_model.onnx"
 
         self.transform = get_eval_transforms()
@@ -246,7 +246,7 @@ class AutonomousDriverUI(QMainWindow):
             if backend == "PyTorch":
                 # Assumes you have a TorchScript exported model (.pt) or you can drop your PilotNet class here
                 if self.approach == 3:
-                    from pilotnet_v3 import ConditionalPilotNet
+                    from pilotnet_regNhead import ConditionalPilotNet
                     self.pt_model = ConditionalPilotNet().to(self.device)
                 else:
                     from pilotnet import ConditionalPilotNet
@@ -400,11 +400,12 @@ class AutonomousDriverUI(QMainWindow):
                     with torch.no_grad():
                         output = self.pt_model(img_t, intent_t)
                     if self.approach == 3:
-                        pred_action = torch.argmax(output, dim=1).cpu().item()
-                        if self.output_mode == "twist":
-                            out1, out2 = self.action_to_twist(pred_action)
-                        else:
-                            out1, out2 = self.action_to_vel(pred_action)
+                        out1, out2 = output[0][0].item(), output[0][1].item()
+                        # pred_action = torch.argmax(output, dim=1).cpu().item()
+                        # if self.output_mode == "twist":
+                        #     out1, out2 = self.action_to_twist(pred_action)
+                        # else:
+                        #     out1, out2 = self.action_to_vel(pred_action)
                     else:
                         out1, out2 = output[0][0].item(), output[0][1].item()
 

@@ -68,11 +68,11 @@ class ConditionalPilotNet(nn.Module):
 
         # Apply the corresponding head based on intent for each sample
         if is_straight.any():
-            output_velocities[is_straight] = self.straight_head(features[is_straight])
+            output_velocities = self.straight_head(features[is_straight])
         if is_left.any():
-            output_velocities[is_left] = self.left_head(features[is_left])
+            output_velocities = self.left_head(features[is_left])
         if is_right.any():
-            output_velocities[is_right] = self.right_head(features[is_right])
+            output_velocities = self.right_head(features[is_right])
         # 'Stop' intent samples (where intent_indices == 3) will remain zeros as initialized.
 
         return output_velocities
