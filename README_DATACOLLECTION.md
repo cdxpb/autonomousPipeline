@@ -42,6 +42,9 @@ Inside the container terminal run the following commands:
    source /code/catkin_ws/devel/setup.bash
    rosrun data_collector_pkg logger_node.py &
    rosrun data_collector_pkg ui_node.py
+
+   rosrun dagger_pkg dagger_node.py &
+   rosrun data_collector_pkg ui_node.py
    ```
 
 ## Controls

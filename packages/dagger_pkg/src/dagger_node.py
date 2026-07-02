@@ -41,11 +41,15 @@ class DAggerNode:
         rospy.loginfo(f"[DAgger] Initialized. Saving corrections to: {self.data_dir}")
 
         # --- AI Model Setup ---
-        self.model_path = "/models/pilotnet/best_model_regNheadv2.onnx"
-        self.ort_session = ort.InferenceSession(self.model_path)
+        self.model_path = "../autonomouspipeline/models/pilotnet/best_model_regNheadv2.pt"
+        from pilotnet_regNheadv2 import ConditionalPilotNet
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.pt_model = ConditionalPilotNet().to(self.device)
+        self.pt_model.load_state_dict(torch.load(self.model_path, map_location=self.device))
+        self.pt_model.eval()
         self.transform = get_eval_transforms()
         
-        self.yolo_path = "/models/yolo_model/yolo_v1_best.onnx"
+        self.yolo_path = "../autonomouspipeline/models/yolo_model/yolo_v1_best.onnx"
         self.yolo_session = YOLO(self.yolo_path, task='semantic')
 
         # --- State Variables ---
@@ -123,16 +127,12 @@ class DAggerNode:
             # Mask is already cropped because YOLO input was cropped
             resized_mask_pil = mask_pil.resize((224, 112), Image.NEAREST)
 
-            img_tensor = TF.to_tensor(resized_mask_pil).unsqueeze(0).numpy()
-            intent_tensor = np.array([INTENT_MAP.get(self.current_intent, [1.0, 0.0, 0.0, 0.0])], dtype=np.float32)
+            img_tensor = TF.to_tensor(resized_mask_pil).unsqueeze(0).to(self.device)
+            intent_tensor = torch.tensor([INTENT_MAP.get(self.current_intent, [1.0, 0.0, 0.0, 0.0])], dtype=torch.float32).to(self.device)
 
-            ort_inputs = {
-                self.ort_session.get_inputs()[0].name: img_tensor,
-                self.ort_session.get_inputs()[1].name: intent_tensor
-            }
-            ort_outs = self.ort_session.run(None, ort_inputs)
+            output = self.pt_model(img_tensor, intent_tensor)
             # Interpret network outputs directly as high-level commands
-            v, omega = ort_outs[0][0][0], ort_outs[0][0][1]
+            v, omega = output[0][0].item(), output[0][1].item()
 
         # Record if requested and human is intervening
         if self.is_recording and self.is_human_intervening:

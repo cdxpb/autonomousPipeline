@@ -37,7 +37,7 @@ Open your terminal in the project root.
 Inside the container terminal run the following commands:
    ```
    source /code/catkin_ws/devel/setup.bash
-   rosrun cond_imitation_learning_pkg autonomous_node.py --approach 3 --output_mode wheels
+   rosrun cond_imitation_learning_pkg autonomous_node.py --approach 5 --output_mode wheels
    ```
 
 To hack into another shell:
