@@ -61,7 +61,7 @@ class DataLoggerNode:
             pass
 
     def synced_callback(self, img_msg, wheel_msg):
-        rospy.loginfo(f"record: {self.is_recording}")
+        # rospy.loginfo(f"record: {self.is_recording}")
 
         if not self.is_recording:
             return
