@@ -61,9 +61,11 @@ class DataLoggerNode:
             pass
 
     def synced_callback(self, img_msg, wheel_msg):
+        rospy.loginfo(f"record: {self.is_recording}")
+
         if not self.is_recording:
             return
-
+        
         timestamp = img_msg.header.stamp.to_sec()
         
         # Save image

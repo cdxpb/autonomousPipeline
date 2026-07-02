@@ -49,7 +49,7 @@ Inside the container terminal run the following commands:
 Ensure the PyQt5 UI window is focused.
 * Drive: W (Forward), S (Reverse), A (Left), D (Right)
 * Record: R (Toggles data logging on/off)
-* Intents: I (Straight), J (Left), L (Right), K (Stop)
+* Intents: I (Straight), J (Left), L (Right), K (Lane Following)
 
 ## Output Format
 

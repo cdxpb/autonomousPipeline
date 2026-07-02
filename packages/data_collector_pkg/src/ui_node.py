@@ -229,7 +229,7 @@ class DataCollectorUI(QMainWindow):
             self.current_intent = "right"
             self.update_status_ui()
         elif event.key() == Qt.Key_K:
-            self.current_intent = "stop"
+            self.current_intent = "lane_following"
             self.update_status_ui()
         elif event.key() == Qt.Key_R:
             self.is_recording = not self.is_recording
