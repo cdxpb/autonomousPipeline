@@ -16,3 +16,5 @@ msc_thesis.fls
 msc_thesis.log
 msc_thesis.pdf
 msc_thesis.synctex.gz
+msc_thesis.bbl
+msc_thesis.fdb_latexmk
