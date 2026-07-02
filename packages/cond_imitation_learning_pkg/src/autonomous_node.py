@@ -87,6 +87,9 @@ class AutonomousDriverUI(QMainWindow):
         elif self.approach == 4:
             self.model_path = "../autonomouspipeline/models/pilotnet/segRegNHeadsTemporal"
             self.yolo_path = "../autonomouspipeline/models/yolo_model/yolo_model.onnx"
+        elif self.approach == 5:
+            self.model_path = "../autonomouspipeline/models/pilotnet/best_model_regNheadv2"
+            self.yolo_path = "../autonomouspipeline/models/yolo_model/yolo_model.onnx"
 
         self.transform = get_eval_transforms()
         self.frame_buffer = []
@@ -201,16 +204,19 @@ class AutonomousDriverUI(QMainWindow):
         self.btn_straight = QPushButton("Straight [I]")
         self.btn_left = QPushButton("Left [J]")
         self.btn_right = QPushButton("Right [L]")
+        self.btn_lane_following = QPushButton("Lane Follow [U]")
         self.btn_stop_intent = QPushButton("Stop [K]")
 
         self.btn_straight.clicked.connect(lambda: self.set_intent("straight"))
         self.btn_left.clicked.connect(lambda: self.set_intent("left"))
         self.btn_right.clicked.connect(lambda: self.set_intent("right"))
+        self.btn_lane_following.clicked.connect(lambda: self.set_intent("lane_following"))
         self.btn_stop_intent.clicked.connect(lambda: self.set_intent("stop"))
 
         intent_layout.addWidget(self.btn_straight)
         intent_layout.addWidget(self.btn_left)
         intent_layout.addWidget(self.btn_right)
+        intent_layout.addWidget(self.btn_lane_following)
         intent_layout.addWidget(self.btn_stop_intent)
         intent_group.setLayout(intent_layout)
         layout.addWidget(intent_group)
@@ -257,6 +263,9 @@ class AutonomousDriverUI(QMainWindow):
                 elif self.approach == 4:
                     from pilotnet_regNCIL_temporal import ConditionalPilotNet
                     self.pt_model = ConditionalPilotNet(num_frames=3).to(self.device)
+                elif self.approach == 5:
+                    from pilotnet_regNheadv2 import ConditionalPilotNet
+                    self.pt_model = ConditionalPilotNet().to(self.device)
                 else:
                     from pilotnet import ConditionalPilotNet
                     self.pt_model = ConditionalPilotNet(in_channels=3 if self.skip_segmentation else 1).to(self.device)
@@ -325,13 +334,13 @@ class AutonomousDriverUI(QMainWindow):
         self.set_intent(msg.data)
 
     def set_intent(self, intent_str):
-        if intent_str in ["straight", "left", "right", "stop"]:
+        if intent_str in ["straight", "left", "right", "stop", "lane_following"]:
             self.current_intent = intent_str
             self.update_intent_button_styles()
 
     def update_intent_button_styles(self):
         buttons = {"straight": self.btn_straight, "left": self.btn_left, 
-                   "right": self.btn_right, "stop": self.btn_stop_intent}
+                   "right": self.btn_right, "stop": self.btn_stop_intent, "lane_following": self.btn_lane_following}
         for name, btn in buttons.items():
             if name == self.current_intent:
                 color = "#dc3545" if name == "stop" else "#007bff"
@@ -578,13 +587,14 @@ class AutonomousDriverUI(QMainWindow):
         elif event.key() == Qt.Key_J: self.set_intent("left")
         elif event.key() == Qt.Key_L: self.set_intent("right")
         elif event.key() == Qt.Key_K: self.set_intent("stop")
+        elif event.key() == Qt.Key_U: self.set_intent("lane_following")
 
     def mousePressEvent(self, event):
         self.setFocus()
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Autonomous Driver Dashboard Node")
-    parser.add_argument("--approach", type=int, choices=[0, 2, 3, 4], default=2, help="0: skip segmentation, 2: segmentation + regression, 3: segmentation + classification, 4: segmentation + regression temporal")
+    parser.add_argument("--approach", type=int, choices=[0, 2, 3, 4, 5], default=2, help="0: skip segmentation, 2: segmentation + regression, 3: segmentation + classification, 4: segmentation + regression temporal, 5: segmentation + regression 4 heads (regNheadv2)")
     parser.add_argument("--skip_segmentation", action="store_true", help="Deprecated. Use --approach 0 instead.")
     parser.add_argument("--output_mode", type=str, choices=["twist", "wheels"], default=None, help="Output mode for driving commands. Defaults to wheels for approach 0/2, twist for approach 3.")
     args, unknown = parser.parse_known_args(rospy.myargv()[1:])

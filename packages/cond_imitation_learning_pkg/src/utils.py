@@ -6,10 +6,11 @@ INPUT_SHAPE = (112, 224) # Height, Width
 
 # Intent mapping for one-hot encoding
 INTENT_MAP = {
-    "straight": [1.0, 0.0, 0.0, 0.0],
-    "left":     [0.0, 1.0, 0.0, 0.0],
-    "right":    [0.0, 0.0, 1.0, 0.0],
-    "stop":     [0.0, 0.0, 0.0, 1.0]
+    "straight":       [1.0, 0.0, 0.0, 0.0],
+    "left":           [0.0, 1.0, 0.0, 0.0],
+    "right":          [0.0, 0.0, 1.0, 0.0],
+    "stop":           [0.0, 0.0, 0.0, 1.0],
+    "lane_following": [0.0, 0.0, 0.0, 1.0]
 }
 
 def crop_image(pil_image):
