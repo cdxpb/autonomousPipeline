@@ -406,7 +406,11 @@ class AutonomousDriverUI(QMainWindow):
                 cropped_mask_pil = crop_image(mask_pil)
                 resized_mask_pil = cropped_mask_pil.resize((224, 112), Image.NEAREST)
 
-                img_tensor = TF.to_tensor(resized_mask_pil).unsqueeze(0).numpy()
+                if self.approach == 4:
+                    img_tensor = np.array(resized_mask_pil, dtype=np.float32)[np.newaxis, np.newaxis, ...]
+                else:
+                    img_tensor = TF.to_tensor(resized_mask_pil).unsqueeze(0).numpy()
+                    
                 ui_model_view = (np.array(resized_mask_pil) * 85).astype(np.uint8)
 
             if self.approach == 4:
