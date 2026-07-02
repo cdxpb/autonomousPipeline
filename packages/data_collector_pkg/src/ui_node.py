@@ -40,6 +40,7 @@ class DataCollectorUI(QMainWindow):
         self.rec_pub = rospy.Publisher(f"/{self.veh}/data_collector/is_recording", Bool, queue_size=1)
         self.intent_pub = rospy.Publisher(f"/{self.veh}/data_collector/intent", String, queue_size=1)
         self.keys_pub = rospy.Publisher(f"/{self.veh}/data_collector/keys", String, queue_size=1)
+        self.model_pub = rospy.Publisher(f"/{self.veh}/data_collector/is_model_running", Bool, queue_size=1)
         
         self.image_sub = rospy.Subscriber(f"/{self.veh}/camera_node/image/compressed", CompressedImage, self.image_cb, queue_size=1, tcp_nodelay=True)
         self.wheels_sub = rospy.Subscriber(f"/{self.veh}/wheels_driver_node/wheels_cmd", WheelsCmdStamped, self.wheels_cb)
@@ -49,6 +50,7 @@ class DataCollectorUI(QMainWindow):
 
         # State Variables
         self.is_recording = False
+        self.is_model_running = False
         self.current_intent = "straight"
         self.current_vel_left = 0.0
         self.current_vel_right = 0.0
@@ -190,10 +192,13 @@ class DataCollectorUI(QMainWindow):
         self.setFocus()
 
     def update_status_ui(self):
-        color = "green" if self.is_recording else "red"
-        state = "ON" if self.is_recording else "OFF"
-        self.status_label.setText(f"Recording: {state} | Intent: {self.current_intent}")
-        self.status_label.setStyleSheet(f"color: {color}; font-weight: bold; font-size: 16px;")
+        rec_color = "green" if self.is_recording else "red"
+        rec_state = "ON" if self.is_recording else "OFF"
+        mod_color = "green" if self.is_model_running else "red"
+        mod_state = "ON" if self.is_model_running else "OFF"
+        self.status_label.setText(f"Recording: {rec_state} | Model: {mod_state} | Intent: {self.current_intent}")
+        # Simplistic styling for now
+        self.status_label.setStyleSheet("font-weight: bold; font-size: 16px;")
 
     def image_cb(self, msg):
         try:
@@ -233,6 +238,9 @@ class DataCollectorUI(QMainWindow):
             self.update_status_ui()
         elif event.key() == Qt.Key_R:
             self.is_recording = not self.is_recording
+            self.update_status_ui()
+        elif event.key() == Qt.Key_M:
+            self.is_model_running = not self.is_model_running
             self.update_status_ui()
 
     def keyReleaseEvent(self, event):
@@ -277,6 +285,10 @@ class DataCollectorUI(QMainWindow):
         keys_msg = String()
         keys_msg.data = f"{w_state},{a_state},{s_state},{d_state}"
         self.keys_pub.publish(keys_msg)
+
+        mod_msg = Bool()
+        mod_msg.data = self.is_model_running
+        self.model_pub.publish(mod_msg)
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)

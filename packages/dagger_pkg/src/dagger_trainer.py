@@ -5,9 +5,9 @@ import pandas as pd
 import torch
 import torch.optim as optim
 
-from pilotnet import ConditionalPilotNet
+from pilotnet_regNheadv2 import ConditionalPilotNet
 from dataset import DuckieTownDataset
-from utils import get_train_transforms
+from utils import get_train_transforms, get_eval_transforms
 
 def aggregate_and_train(base_dataset_dir, dagger_run_dir, model_save_dir):
     print("=== DAgger Aggregation Phase ===")
@@ -41,7 +41,7 @@ def aggregate_and_train(base_dataset_dir, dagger_run_dir, model_save_dir):
     model = ConditionalPilotNet().to(device)
     
     # Load previous best weights to fine-tune
-    previous_weights = os.path.join(model_save_dir, "best_model.pth")
+    previous_weights = os.path.join(model_save_dir, "best_model_regNheadv2.pth")
     if os.path.exists(previous_weights):
         model.load_state_dict(torch.load(previous_weights, map_location=device))
         print("Loaded previous model weights for fine-tuning.")
@@ -49,7 +49,7 @@ def aggregate_and_train(base_dataset_dir, dagger_run_dir, model_save_dir):
     optimizer = optim.Adam(model.parameters(), lr=0.0001) # Lower learning rate for fine-tuning
     criterion = torch.nn.MSELoss()
     
-    dataset = DuckieTownDataset(df_combined, base_img_dir, transform=get_train_transforms())
+    dataset = DuckieTownDataset(df_combined, base_img_dir, transform=get_eval_transforms())
     loader = torch.utils.data.DataLoader(dataset, batch_size=64, shuffle=True)
     
     model.train()

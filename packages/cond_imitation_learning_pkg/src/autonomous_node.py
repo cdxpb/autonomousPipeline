@@ -89,7 +89,7 @@ class AutonomousDriverUI(QMainWindow):
             self.yolo_path = "../autonomouspipeline/models/yolo_model/yolo_model.onnx"
         elif self.approach == 5:
             self.model_path = "../autonomouspipeline/models/pilotnet/best_model_regNheadv2"
-            self.yolo_path = "../autonomouspipeline/models/yolo_model/yolo_model.onnx"
+            self.yolo_path = "../autonomouspipeline/models/yolo_model/yolo_v1_best.onnx"
 
         self.transform = get_eval_transforms()
         self.frame_buffer = []
@@ -405,15 +405,21 @@ class AutonomousDriverUI(QMainWindow):
                     ui_model_view = np.zeros((112, 224, 3), dtype=np.uint8)
             else:
                 pil_image = Image.fromarray(rgb_image)
+                cropped_img = crop_image(pil_image)
 
                 with torch.no_grad():
-                    yolo_results = self.yolo_session(pil_image, verbose=False)
+                    if self.approach == 5:
+                        yolo_results = self.yolo_session(cropped_img, verbose=False)
+                    else:
+                        yolo_results = self.yolo_session(pil_image, verbose=False)
 
                 mask = yolo_results[0].semantic_mask.data.cpu()
                 mask_pil = Image.fromarray(mask.numpy())
 
-                cropped_mask_pil = crop_image(mask_pil)
-                resized_mask_pil = cropped_mask_pil.resize((224, 112), Image.NEAREST)
+                if self.approach != 5:
+                    mask_pil = crop_image(mask_pil)
+
+                resized_mask_pil = mask_pil.resize((224, 112), Image.NEAREST)
 
                 if self.approach == 4:
                     img_tensor = np.array(resized_mask_pil, dtype=np.float32)[np.newaxis, np.newaxis, ...]

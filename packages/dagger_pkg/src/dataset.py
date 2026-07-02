@@ -10,6 +10,12 @@ class DuckieTownDataset(Dataset):
         self.dataframe = dataframe
         self.image_dir = image_dir
         self.transform = transform
+        try:
+            from ultralytics import YOLO
+            # Assuming model paths inside the docker container
+            self.yolo = YOLO("/models/yolo_model/yolo_v1_best.onnx", task="semantic")
+        except ImportError:
+            self.yolo = None
 
     def __len__(self):
         return len(self.dataframe)
@@ -18,6 +24,13 @@ class DuckieTownDataset(Dataset):
         img_name = os.path.join(self.image_dir, self.dataframe.iloc[idx]['image_filename'])
         image = Image.open(img_name).convert('RGB')
         image = crop_image(image)
+        
+        if self.yolo:
+            import torch
+            with torch.no_grad():
+                results = self.yolo(image, verbose=False)
+            mask = results[0].semantic_mask.data.cpu().numpy()
+            image = Image.fromarray(mask).resize((224, 112), Image.NEAREST)
 
         vel_left = self.dataframe.iloc[idx]['vel_left']
         vel_right = self.dataframe.iloc[idx]['vel_right']
