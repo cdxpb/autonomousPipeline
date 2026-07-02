@@ -84,8 +84,14 @@ class AutonomousDriverUI(QMainWindow):
         elif self.approach == 3:
             self.model_path = "../autonomouspipeline/models/pilotnet/best_model_regNhead"
             self.yolo_path = "../autonomouspipeline/models/yolo_model/yolo_model.onnx"
+        elif self.approach == 4:
+            self.model_path = "../autonomouspipeline/models/pilotnet/segRegNHeadsTemporal"
+            self.yolo_path = "../autonomouspipeline/models/yolo_model/yolo_model.onnx"
 
         self.transform = get_eval_transforms()
+        self.frame_buffer = []
+        self.prev_out1 = 0.0
+        self.prev_out2 = 0.0
 
         # Thread-safe communication bridge
         self.bridge = TelemetryBridge()
@@ -248,6 +254,9 @@ class AutonomousDriverUI(QMainWindow):
                 if self.approach == 3:
                     from pilotnet_regNhead import ConditionalPilotNet
                     self.pt_model = ConditionalPilotNet().to(self.device)
+                elif self.approach == 4:
+                    from pilotnet_regNCIL_temporal import ConditionalPilotNet
+                    self.pt_model = ConditionalPilotNet(num_frames=3).to(self.device)
                 else:
                     from pilotnet import ConditionalPilotNet
                     self.pt_model = ConditionalPilotNet(in_channels=3 if self.skip_segmentation else 1).to(self.device)
@@ -262,11 +271,17 @@ class AutonomousDriverUI(QMainWindow):
                 with open(f"{self.model_path}.engine", "rb") as f, trt.Runtime(self.logger) as runtime:
                     self.engine = runtime.deserialize_cuda_engine(f.read())
                 self.context = self.engine.create_execution_context()
-                channels = 3 if self.skip_segmentation else 1
+                channels = 3 if self.skip_segmentation else (3 if self.approach == 4 else 1)
                 self.d_img_in = cuda.mem_alloc(1 * channels * 112 * 224 * 4)
                 self.d_intent_in = cuda.mem_alloc(1 * 4 * 4) 
-                self.d_output = cuda.mem_alloc(1 * (4 if self.approach == 3 else 2) * 4)
-                self.bindings = [int(self.d_img_in), int(self.d_intent_in), int(self.d_output)]
+                
+                if self.approach == 4:
+                    self.d_vel_in = cuda.mem_alloc(1 * 2 * 4)
+                    self.d_output = cuda.mem_alloc(1 * 2 * 4)
+                    self.bindings = [int(self.d_img_in), int(self.d_vel_in), int(self.d_intent_in), int(self.d_output)]
+                else:
+                    self.d_output = cuda.mem_alloc(1 * (4 if self.approach == 3 else 2) * 4)
+                    self.bindings = [int(self.d_img_in), int(self.d_intent_in), int(self.d_output)]
 
             # Switch UI State
             self.active_backend = backend
@@ -334,17 +349,23 @@ class AutonomousDriverUI(QMainWindow):
             self.yolo_session = YOLO(self.yolo_path, task="semantic")
 
         rospy.loginfo(f"UI: Loading PilotNet model from {self.model_path}...")
-        if USE_TENSORRT:
+        if TRT_AVAILABLE:
             self.logger = trt.Logger(trt.Logger.WARNING)
             with open(f"{self.model_path}.engine", "rb") as f, trt.Runtime(self.logger) as runtime:
                 self.engine = runtime.deserialize_cuda_engine(f.read())
             self.context = self.engine.create_execution_context()
             
-            channels = 3 if self.skip_segmentation else 1
+            channels = 3 if self.skip_segmentation else (3 if self.approach == 4 else 1)
             self.d_img_in = cuda.mem_alloc(1 * channels * 112 * 224 * 4)
             self.d_intent_in = cuda.mem_alloc(1 * 4 * 4) 
-            self.d_output = cuda.mem_alloc(1 * (4 if self.approach == 3 else 2) * 4)
-            self.bindings = [int(self.d_img_in), int(self.d_intent_in), int(self.d_output)]
+            
+            if self.approach == 4:
+                self.d_vel_in = cuda.mem_alloc(1 * 2 * 4)
+                self.d_output = cuda.mem_alloc(1 * 2 * 4)
+                self.bindings = [int(self.d_img_in), int(self.d_vel_in), int(self.d_intent_in), int(self.d_output)]
+            else:
+                self.d_output = cuda.mem_alloc(1 * (4 if self.approach == 3 else 2) * 4)
+                self.bindings = [int(self.d_img_in), int(self.d_intent_in), int(self.d_output)]
         else:
             self.ort_session = ort.InferenceSession(f"{self.model_path}.onnx")
 
@@ -388,6 +409,14 @@ class AutonomousDriverUI(QMainWindow):
                 img_tensor = TF.to_tensor(resized_mask_pil).unsqueeze(0).numpy()
                 ui_model_view = (np.array(resized_mask_pil) * 85).astype(np.uint8)
 
+            if self.approach == 4:
+                if len(self.frame_buffer) == 0:
+                    self.frame_buffer = [img_tensor] * 3
+                else:
+                    self.frame_buffer.pop(0)
+                    self.frame_buffer.append(img_tensor)
+                img_tensor = np.concatenate(self.frame_buffer, axis=1)
+
             out1, out2 = 0.0, 0.0
 
             # 3. Inference Gate (Only runs if "START" is active)
@@ -397,21 +426,31 @@ class AutonomousDriverUI(QMainWindow):
                 if self.active_backend == "PyTorch":
                     img_t = torch.from_numpy(img_tensor).to(self.device)
                     intent_t = torch.from_numpy(intent_tensor).to(self.device)
-                    with torch.no_grad():
-                        output = self.pt_model(img_t, intent_t)
-                    if self.approach == 3:
+                    
+                    if self.approach == 4:
+                        vel_t = torch.tensor([[self.prev_out1, self.prev_out2]], dtype=torch.float32).to(self.device)
+                        with torch.no_grad():
+                            output = self.pt_model(img_t, vel_t, intent_t)
                         out1, out2 = output[0][0].item(), output[0][1].item()
-                        # pred_action = torch.argmax(output, dim=1).cpu().item()
-                        # if self.output_mode == "twist":
-                        #     out1, out2 = self.action_to_twist(pred_action)
-                        # else:
-                        #     out1, out2 = self.action_to_vel(pred_action)
                     else:
-                        out1, out2 = output[0][0].item(), output[0][1].item()
+                        with torch.no_grad():
+                            output = self.pt_model(img_t, intent_t)
+                        if self.approach == 3:
+                            out1, out2 = output[0][0].item(), output[0][1].item()
+                            # pred_action = torch.argmax(output, dim=1).cpu().item()
+                            # if self.output_mode == "twist":
+                            #     out1, out2 = self.action_to_twist(pred_action)
+                            # else:
+                            #     out1, out2 = self.action_to_vel(pred_action)
+                        else:
+                            out1, out2 = output[0][0].item(), output[0][1].item()
 
                 elif self.active_backend == "TensorRT":
                     cuda.memcpy_htod(self.d_img_in, img_tensor)
                     cuda.memcpy_htod(self.d_intent_in, intent_tensor)
+                    if self.approach == 4:
+                        vel_tensor = np.array([[self.prev_out1, self.prev_out2]], dtype=np.float32)
+                        cuda.memcpy_htod(self.d_vel_in, vel_tensor)
                     self.context.execute_v2(bindings=self.bindings)
                     h_output = np.empty((1, 4 if self.approach == 3 else 2), dtype=np.float32)
                     cuda.memcpy_dtoh(h_output, self.d_output)
@@ -433,6 +472,10 @@ class AutonomousDriverUI(QMainWindow):
                     if isinstance(raw_intent, list) and isinstance(raw_intent[0], list):
                         raw_intent = raw_intent[0]
                     intent_tensor = np.array([raw_intent], dtype=np.float32)
+                    
+                    vel_tensor = None
+                    if self.approach == 4:
+                        vel_tensor = np.array([[self.prev_out1, self.prev_out2]], dtype=np.float32)
 
                     for ort_in in self.ort_session.get_inputs():
                         expected_shape = ort_in.shape
@@ -440,14 +483,21 @@ class AutonomousDriverUI(QMainWindow):
                         in_type = ort_in.type
                         
                         # 1. Identify Intent (Usually 1D or 2D, or named 'intent'/'cmd')
-                        if (expected_shape and len(expected_shape) <= 2) or any(k in in_name.lower() for k in ['intent', 'cmd', 'command']):
+                        if (expected_shape and len(expected_shape) <= 2 and expected_shape[-1] == 4) or any(k in in_name.lower() for k in ['intent', 'cmd', 'command']):
                             # Match the type ONNX expects (Fallback to float32)
                             if 'int64' in in_type:
                                 ort_inputs[in_name] = intent_tensor.astype(np.int64)
                             else:
                                 ort_inputs[in_name] = intent_tensor.astype(np.float32)
                                 
-                        # 2. Identify Image (Usually 4D, or named 'input'/'img'/'x')
+                        # 2. Identify Velocities (Approach 4)
+                        elif self.approach == 4 and ((expected_shape and len(expected_shape) == 2 and expected_shape[-1] == 2) or any(k in in_name.lower() for k in ['vel', 'state'])):
+                            if 'int64' in in_type:
+                                ort_inputs[in_name] = vel_tensor.astype(np.int64)
+                            else:
+                                ort_inputs[in_name] = vel_tensor.astype(np.float32)
+                                
+                        # 3. Identify Image (Usually 4D, or named 'input'/'img'/'x')
                         else:
                             if 'float64' in in_type:
                                 ort_inputs[in_name] = img_tensor.astype(np.float64)
@@ -471,6 +521,10 @@ class AutonomousDriverUI(QMainWindow):
                         expected_debug = {i.name: i.shape for i in self.ort_session.get_inputs()}
                         rospy.logerr(f"CRITICAL ONNX MISMATCH! We sent: {mapping_debug} | ONNX Expected: {expected_debug}")
                         raise e # Re-raise to trigger the throttle block below
+
+                if self.approach == 4:
+                    self.prev_out1 = out1
+                    self.prev_out2 = out2
 
                 # Publish Motor Commands
                 if self.output_mode == "twist":
@@ -526,7 +580,7 @@ class AutonomousDriverUI(QMainWindow):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Autonomous Driver Dashboard Node")
-    parser.add_argument("--approach", type=int, choices=[0, 2, 3], default=2, help="0: skip segmentation, 2: segmentation + regression, 3: segmentation + classification")
+    parser.add_argument("--approach", type=int, choices=[0, 2, 3, 4], default=2, help="0: skip segmentation, 2: segmentation + regression, 3: segmentation + classification, 4: segmentation + regression temporal")
     parser.add_argument("--skip_segmentation", action="store_true", help="Deprecated. Use --approach 0 instead.")
     parser.add_argument("--output_mode", type=str, choices=["twist", "wheels"], default=None, help="Output mode for driving commands. Defaults to wheels for approach 0/2, twist for approach 3.")
     args, unknown = parser.parse_known_args(rospy.myargv()[1:])
