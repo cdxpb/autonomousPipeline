@@ -7,3 +7,5 @@ torchvision
 pillow
 onnxruntime
 ultralytics
+requests
+onnx

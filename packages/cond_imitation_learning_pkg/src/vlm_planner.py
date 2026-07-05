@@ -19,9 +19,7 @@ from typing  import List, Tuple, Dict, Optional
 from enum    import Enum, auto
 from dataclasses import dataclass, field
 
-import torch
 from PIL import Image
-from transformers import AutoProcessor, AutoModelForImageTextToText, BitsAndBytesConfig
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -206,7 +204,8 @@ PROMPT = (
 )
 
 
-def _get_device() -> torch.device:
+def _get_device():
+    import torch
     if torch.backends.mps.is_available(): return torch.device("mps")
     if torch.cuda.is_available():         return torch.device("cuda")
     return torch.device("cpu")
@@ -230,6 +229,9 @@ class VLMOracle:
     """
 
     def __init__(self, cfg: Config):
+        import torch
+        from transformers import AutoProcessor, AutoModelForVision2Seq, BitsAndBytesConfig
+        
         self.device = _get_device()
         dtype       = torch.float16 if self.device.type != "cpu" else torch.float32
         print(f"Loading {cfg.model_id}  [{cfg.precision}]  on {self.device} ...")
@@ -267,26 +269,29 @@ class VLMOracle:
             ids.update(self.processor.tokenizer.encode(w, add_special_tokens=False))
         return list(ids)
 
-    @torch.no_grad()
     def at_intersection(self, image: Image.Image) -> Tuple[bool, float]:
         """
         Returns (at_intersection: bool, confidence: float).
         Confidence is the softmax probability of 'yes' vs 'no'.
         """
+        import torch
+        
         messages = [{"role": "user", "content": [
             {"type": "image"},
             {"type": "text", "text": PROMPT},
         ]}]
-        prompt = self.processor.apply_chat_template(messages, add_generation_prompt=True)
-        inputs = self.processor(text=prompt, images=[image], return_tensors="pt")
-        inputs = {k: v.to(self.model.device) for k, v in inputs.items()}
+        
+        with torch.no_grad():
+            prompt = self.processor.apply_chat_template(messages, add_generation_prompt=True)
+            inputs = self.processor(text=prompt, images=[image], return_tensors="pt")
+            inputs = {k: v.to(self.model.device) for k, v in inputs.items()}
 
-        logits   = self.model(**inputs).logits[0, -1, :]   # next-token logits
-        yes_logit = logits[self.yes_ids].max().item()
-        no_logit  = logits[self.no_ids ].max().item()
-        yes_conf  = torch.softmax(
-            torch.tensor([yes_logit, no_logit]), dim=0
-        )[0].item()
+            logits   = self.model(**inputs).logits[0, -1, :]   # next-token logits
+            yes_logit = logits[self.yes_ids].max().item()
+            no_logit  = logits[self.no_ids ].max().item()
+            yes_conf  = torch.softmax(
+                torch.tensor([yes_logit, no_logit]), dim=0
+            )[0].item()
 
         return yes_conf > 0.5, yes_conf
 

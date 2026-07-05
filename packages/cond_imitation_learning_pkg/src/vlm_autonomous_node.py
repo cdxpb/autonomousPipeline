@@ -52,6 +52,16 @@ class VLMWorker(QThread):
         self.running = False
 
     def run(self):
+        # Emit initial parsed plan so UI updates immediately
+        self.update_signal.emit(
+            str(self.fsm.plan),
+            self.fsm.state.name,
+            False,
+            0.0,
+            self.fsm.count,
+            "lane_following"
+        )
+        
         # 4 FPS rate limiting
         rate = rospy.Rate(4)
         while self.running and not rospy.is_shutdown():
@@ -65,7 +75,7 @@ class VLMWorker(QThread):
                             response = requests.post(
                                 f"{self.server_url}/predict/vlm", 
                                 files={"file": ("frame.jpg", buffer.tobytes(), "image/jpeg")},
-                                timeout=2.0
+                                timeout=15.0
                             )
                             if response.status_code == 200:
                                 data = response.json()
