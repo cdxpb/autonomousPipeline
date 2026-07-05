@@ -21,7 +21,7 @@ from dataclasses import dataclass, field
 
 import torch
 from PIL import Image
-from transformers import AutoProcessor, AutoModelForVision2Seq, BitsAndBytesConfig
+from transformers import AutoProcessor, AutoModelForImageTextToText, BitsAndBytesConfig
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -246,7 +246,7 @@ class VLMOracle:
             bnb_cfg = BitsAndBytesConfig(load_in_8bit=True)
 
         self.processor = AutoProcessor.from_pretrained(cfg.model_id)
-        self.model = AutoModelForVision2Seq.from_pretrained(
+        self.model = AutoModelForImageTextToText.from_pretrained(
             cfg.model_id,
             torch_dtype=dtype,
             quantization_config=bnb_cfg,

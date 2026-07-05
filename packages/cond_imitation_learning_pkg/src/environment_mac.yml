@@ -9,10 +9,13 @@ dependencies:
   - pytorch::pytorch
   - torchvision
   - torchaudio
+  - libtiff
+  - jpeg
+  - pillow
   - pip
   - pip:
       - transformers
       - fastapi
       - uvicorn[standard]
       - python-multipart
-      - pillow
+      - num2words
