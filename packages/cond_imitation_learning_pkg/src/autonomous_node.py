@@ -89,7 +89,7 @@ class AutonomousDriverUI(QMainWindow):
             self.yolo_path = "../autonomouspipeline/models/yolo_model/yolo_model.onnx"
         elif self.approach == 5:
             self.model_path = "../autonomouspipeline/models/pilotnet/best_model_regNheadv2"
-            self.yolo_path = "../autonomouspipeline/models/yolo_model/yolo_v1_best.onnx"
+            self.yolo_path = "../autonomouspipeline/models/yolo_model/yolo_model.onnx"
 
         self.transform = get_eval_transforms()
         self.frame_buffer = []
