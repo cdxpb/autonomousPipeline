@@ -230,7 +230,7 @@ class VLMOracle:
 
     def __init__(self, cfg: Config):
         import torch
-        from transformers import AutoProcessor, AutoModelForVision2Seq, BitsAndBytesConfig
+        from transformers import AutoProcessor, AutoModelForImageTextToText, BitsAndBytesConfig
         
         self.device = _get_device()
         dtype       = torch.float16 if self.device.type != "cpu" else torch.float32
