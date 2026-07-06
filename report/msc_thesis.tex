@@ -1,8 +1,14 @@
 \documentclass[a4paper,cleardoubleempty,BCOR1cm]{scrbook}
 \input{header}
 
-\title{Thesis Template}
-\author{My Name \thanks{e-mail: my.name@uni-tuebingen.de}}
+\title{Conditional Imitation Learning with Duckietown}
+\author{DuckieExpress}
+
+% DuckieExpress: \\
+% Pankaj Bora \thanks{e-mail: my.name@uni-tuebingen.de} \\
+% Elia Reppchen \thanks{e-mail: my.name@uni-tuebingen.de} \\
+% Eric Berger \thanks{e-mail: my.name@uni-tuebingen.de} \\
+% Felix Schlechte \thanks{e-mail: felix.schlechte@student.uni-tuebingen.de} \\}
 \date{\today}
 \begin{document}
 
@@ -10,9 +16,6 @@
 
 \chapter*{Abstract}
 Test
-
-\chapter*{Acknowledgments}
-If you have someone to Acknowledge ;)
 
 \tableofcontents
 
@@ -22,18 +25,45 @@ If you have someone to Acknowledge ;)
 
 % write content here or...
 \chapter{Introduction}
-What is this all about?
+\begin{enumerate}
+    \item shortly describe Duckietown in general 
+    \item describe the problems that we had: 
+    \begin{enumerate}
+        \item massive drift of the bot when driving straight
+        \item odometry is not precise $\to$ PID control is almost impossible
+        \item lane detection via HSV values (from computer vision LX) is bad and not robust 
+    \end{enumerate}
+\end{enumerate}
+We try to adress these challenges via... (transition to next chapter)
 
-Cite like this: \cite{agarwal2011}
+\chapter{Method}
+\section{Data Collection}
+... 
 
-\section{Problem Statement}
-\todo{what you have to do here :)}
+\section{YOLO segmentation model}
+To solve the problem with lane detection, we trained a small YOLO model to get robust lane detections.... 
+
+\section{Conditional Imitation Learning}
+Since PID control is not working (because of bad wheel odometry) we try to solve this with Consitional Imitation learning (CIL)... \\
+Describe all architectures with input and ouput.  
+
+\section{Getting High Level Commands from a VLM}
+@Pankaj
+
+\chapter{Experiments and Ablations}
+define 3-5 tasks and try out different models 10 times on the same task and report: 
+\begin{enumerate}
+    \item success rate 
+    \item average completation time with standart deviation  
+    \item report what fails 
+\end{enumerate}
+maybe also we can link videos of different driving styles of our bots 
 
 % ... input content via other .tex files
 \input{content/conclusion}
 
 \appendix
-\chapter{Blub}
+\chapter{Contributions}
 
 \bibliographystyle{alpha}
 \bibliography{bibliography}
