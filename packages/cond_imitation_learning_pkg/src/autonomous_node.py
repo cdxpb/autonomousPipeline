@@ -23,7 +23,8 @@ from std_msgs.msg import String
 
 # PyQt5 UI Components
 from PyQt5.QtWidgets import (QApplication, QLabel, QMainWindow, QVBoxLayout, 
-                             QHBoxLayout, QWidget, QGroupBox, QPushButton, QComboBox)
+                             QHBoxLayout, QWidget, QGroupBox, QPushButton, QComboBox,
+                             QCheckBox, QLineEdit)
 from PyQt5.QtGui import QImage, QPixmap
 from PyQt5.QtCore import Qt, pyqtSignal, QObject
 
