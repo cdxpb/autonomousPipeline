@@ -1,8 +1,9 @@
-#!/usr/bin/env python3
 import sys
 import os
 import json
 import argparse
+import time
+import requests
 import rospy
 import cv2
 import numpy as np
@@ -101,6 +102,10 @@ class AutonomousDriverUI(QMainWindow):
         self.frame_buffer = []
         self.prev_out1 = 0.0
         self.prev_out2 = 0.0
+        
+        # Load management
+        self.target_fps = 12
+        self.last_frame_time = 0.0
 
         # Thread-safe communication bridge
         self.bridge = TelemetryBridge()
@@ -109,10 +114,10 @@ class AutonomousDriverUI(QMainWindow):
         # UI Setup
         self.init_ui()
 
-        # Always load YOLO if not skipping, so we can preview the mask even when stopped
-        if not self.skip_segmentation:
-            rospy.loginfo("UI: Loading YOLO Semantic Segmentation model for previews...")
-            self.yolo_session = YOLO(self.yolo_path, task='semantic')
+        # Load YOLO if we are not skipping segmentation and not offloading by default
+        self.yolo_session = None
+        if not self.skip_segmentation and not self.chk_seg_offload.isChecked():
+            self._load_local_yolo()
 
         # ROS Publishers & Subscribers``
         if self.output_mode == "twist":
@@ -121,6 +126,11 @@ class AutonomousDriverUI(QMainWindow):
             self.cmd_pub = rospy.Publisher(f"/{self.veh}/wheels_driver_node/wheels_cmd", WheelsCmdStamped, queue_size=1, tcp_nodelay=True)
         self.image_sub = rospy.Subscriber(f"/{self.veh}/camera_node/image/compressed", CompressedImage, self.image_cb, queue_size=1, buff_size=2**24, tcp_nodelay=True)
         self.intent_sub = rospy.Subscriber(f"/{self.veh}/data_collector/intent", String, self.intent_cb)
+
+    def _load_local_yolo(self):
+        if self.yolo_session is None:
+            rospy.loginfo("UI: Loading YOLO Semantic Segmentation model locally...")
+            self.yolo_session = YOLO(self.yolo_path, task='semantic')
 
     def load_tuning_config(self):
         default_config = {
@@ -168,6 +178,31 @@ class AutonomousDriverUI(QMainWindow):
         control_layout.addWidget(self.btn_stop)
         control_group.setLayout(control_layout)
         layout.addWidget(control_group)
+
+        # --- SEGMENTATION & PERFORMANCE BAR ---
+        perf_group = QGroupBox("Segmentation Offload & Performance")
+        perf_layout = QHBoxLayout()
+
+        self.chk_seg_offload = QCheckBox("Offload Segmentation (Mac Server)")
+        self.chk_seg_offload.setChecked(True)
+        self.chk_seg_offload.stateChanged.connect(self.toggle_seg_offload)
+
+        self.seg_server_input = QLineEdit()
+        self.seg_server_input.setText("http://192.168.1.100:8000") # Default local network IP
+        
+        self.fps_input = QComboBox()
+        self.fps_input.addItems(["Max", "30", "15", "12", "10", "5"])
+        self.fps_input.setCurrentText("12")
+        self.fps_input.currentTextChanged.connect(self.update_fps_limit)
+
+        perf_layout.addWidget(self.chk_seg_offload)
+        perf_layout.addWidget(QLabel("Server URL:"))
+        perf_layout.addWidget(self.seg_server_input)
+        perf_layout.addWidget(QLabel("Target FPS:"))
+        perf_layout.addWidget(self.fps_input)
+        
+        perf_group.setLayout(perf_layout)
+        layout.addWidget(perf_group)
 
         # --- CAMERA DISPLAYS ---
         img_layout = QHBoxLayout()
@@ -232,6 +267,21 @@ class AutonomousDriverUI(QMainWindow):
         self.update_intent_button_styles()
         self.setFocusPolicy(Qt.StrongFocus)
 
+    def toggle_seg_offload(self):
+        is_offload = self.chk_seg_offload.isChecked()
+        self.seg_server_input.setEnabled(is_offload)
+        if not is_offload and not self.skip_segmentation:
+            self._load_local_yolo()
+
+    def update_fps_limit(self, text):
+        if text == "Max":
+            self.target_fps = 1000
+        else:
+            try:
+                self.target_fps = int(text)
+            except ValueError:
+                self.target_fps = 12
+
     def action_to_vel(self, action_idx):
         # 0: straight, 1: left, 2: right, 3: stop
         mapping = {
@@ -247,9 +297,9 @@ class AutonomousDriverUI(QMainWindow):
         if action_idx == 0:
             return self.tuning["v_fwd"], 0.0
         elif action_idx == 1:
-            return self.tuning["v_bump_a"], self.tuning["omega_a"]
+            return self.tuning["v_fwd"] + self.tuning["v_bump_a"], self.tuning["omega_a"]
         elif action_idx == 2:
-            return self.tuning["v_bump_d"], -self.tuning["omega_d"]
+            return self.tuning["v_fwd"] + self.tuning["v_bump_d"], -self.tuning["omega_d"]
         else: # 3: stop
             return 0.0, 0.0
 
@@ -365,10 +415,8 @@ class AutonomousDriverUI(QMainWindow):
     # MAIN ROS INFERENCE LOOP
     # ---------------------------------------------------------
     def setup_inference_engine(self):
-        if not self.skip_segmentation:
-            rospy.loginfo("UI: Loading YOLO Semantic Segmentation model for previews...")
-            # Added verbose=False to stop the terminal spam!
-            self.yolo_session = YOLO(self.yolo_path, task="semantic")
+        if not self.skip_segmentation and not self.chk_seg_offload.isChecked():
+            self._load_local_yolo()
 
         rospy.loginfo(f"UI: Loading PilotNet model from {self.model_path}...")
         if TRT_AVAILABLE:
@@ -420,15 +468,51 @@ class AutonomousDriverUI(QMainWindow):
             else:
                 pil_image = Image.fromarray(rgb_image)
                 cropped_img = crop_image(pil_image)
+                
+                # Frame Rate Limiter
+                current_time = time.time()
+                if (current_time - self.last_frame_time) < (1.0 / self.target_fps):
+                    return
+                self.last_frame_time = current_time
 
-                with torch.no_grad():
-                    if self.approach in [5, 6, 7]:
-                        yolo_results = self.yolo_session(cropped_img, verbose=False)
-                    else:
-                        yolo_results = self.yolo_session(pil_image, verbose=False)
+                if self.chk_seg_offload.isChecked():
+                    # Offload to external server
+                    server_url = self.seg_server_input.text().strip()
+                    img_to_send = cropped_img if self.approach in [5, 6, 7] else pil_image
+                    
+                    is_success, buffer = cv2.imencode(".jpg", cv2.cvtColor(np.array(img_to_send), cv2.COLOR_RGB2BGR))
+                    if is_success:
+                        try:
+                            # Send synchronous request
+                            response = requests.post(
+                                f"{server_url}/predict/segmentation",
+                                files={"file": ("frame.jpg", buffer.tobytes(), "image/jpeg")},
+                                timeout=2.0
+                            )
+                            if response.status_code == 200:
+                                mask_bytes = response.content
+                                mask_np_arr = np.frombuffer(mask_bytes, np.uint8)
+                                mask_cv = cv2.imdecode(mask_np_arr, cv2.IMREAD_GRAYSCALE)
+                                if mask_cv is not None:
+                                    mask_pil = Image.fromarray(mask_cv)
+                                else:
+                                    raise ValueError("Failed to decode received mask")
+                            else:
+                                rospy.logwarn_throttle(2.0, f"Server returned {response.status_code}")
+                                return
+                        except requests.exceptions.RequestException as e:
+                            rospy.logwarn_throttle(2.0, f"Segmentation Server connection failed: {e}")
+                            return
+                else:
+                    # Local Inference
+                    with torch.no_grad():
+                        if self.approach in [5, 6, 7]:
+                            yolo_results = self.yolo_session(cropped_img, verbose=False)
+                        else:
+                            yolo_results = self.yolo_session(pil_image, verbose=False)
 
-                mask = yolo_results[0].semantic_mask.data.cpu()
-                mask_pil = Image.fromarray(mask.numpy())
+                    mask = yolo_results[0].semantic_mask.data.cpu()
+                    mask_pil = Image.fromarray(mask.numpy())
 
                 if self.approach not in [5, 6, 7]:
                     mask_pil = crop_image(mask_pil)
