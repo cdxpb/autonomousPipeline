@@ -90,10 +90,11 @@ def parse_instruction(text: str) -> List[Tuple[str, int]]:
 # ─────────────────────────────────────────────────────────────────────────────
 
 class FSMState(Enum):
-    LANE_FOLLOWING  = auto()   # emit 'lane_following'
-    PASSING_THROUGH = auto()   # at unwanted intersection; emit 'straight'
-    EXECUTING       = auto()   # at target intersection; emit planned direction
-    DONE            = auto()   # emit 'stop'
+    LANE_FOLLOWING          = auto()   # emit 'lane_following'
+    PASSING_THROUGH_VALID   = auto()   # at target intersection but not target count; emit 'straight'
+    PASSING_THROUGH_INVALID = auto()   # at intersection but target direction invalid; emit 'straight'
+    EXECUTING               = auto()   # at target intersection; emit planned direction
+    DONE                    = auto()   # emit 'stop'
 
 
 class NavFSM:
@@ -108,9 +109,10 @@ class NavFSM:
         self.plan     = list(plan)
         self.cfg      = cfg
         self.state    = FSMState.LANE_FOLLOWING
-        self.count    = 0     # intersections confirmed so far
-        self.at_buf   = []    # sliding window for at_intersection confirmations
-        self.left_buf = []    # sliding window for exit confirmations
+        self.count    = 0     # valid intersections confirmed so far
+        self.valid_buf = []   # sliding window for 'yes'
+        self.invalid_buf = [] # sliding window for 'pass'
+        self.none_buf = []    # sliding window for 'no'
         self.cooldown = 0
         self.frame    = 0
         self.log: List[dict] = []
@@ -125,25 +127,32 @@ class NavFSM:
     def _confirmed(self, buf: list, window: int) -> bool:
         return len(buf) >= window and sum(buf[-window:]) == window
 
-    def step(self, at_intersection: bool) -> str:
+    def step(self, ans: str) -> str:
         self.frame += 1
-        flag = int(at_intersection)
 
         if self.state == FSMState.DONE:
-            return self._emit("stop", at_intersection)
+            return self._emit("stop", ans)
 
         if self.cooldown > 0:
             self.cooldown -= 1
-            self.at_buf, self.left_buf = [], []
-            return self._emit("lane_following", at_intersection)
+            self.valid_buf, self.invalid_buf, self.none_buf = [], [], []
+            return self._emit("lane_following", ans)
 
         # ── LANE_FOLLOWING ────────────────────────────────────────────────────
         if self.state == FSMState.LANE_FOLLOWING:
-            self.at_buf.append(flag)
-            self.left_buf = []
-            if self._confirmed(self.at_buf, self.cfg.at_intersection_window):
+            if ans == "yes":
+                self.valid_buf.append(1)
+                self.invalid_buf = []
+            elif ans == "pass":
+                self.invalid_buf.append(1)
+                self.valid_buf = []
+            else:
+                self.valid_buf = []
+                self.invalid_buf = []
+
+            if self._confirmed(self.valid_buf, self.cfg.at_intersection_window):
                 self.count += 1
-                self.at_buf = []
+                self.valid_buf = []
                 action, target = self._current
                 if action == "stop":
                     self.state = FSMState.DONE
@@ -151,38 +160,48 @@ class NavFSM:
                     self.state = FSMState.EXECUTING
                     self.count = 0
                 else:
-                    self.state = FSMState.PASSING_THROUGH
-            return self._emit("lane_following", at_intersection)
+                    self.state = FSMState.PASSING_THROUGH_VALID
+            elif self._confirmed(self.invalid_buf, self.cfg.at_intersection_window):
+                self.invalid_buf = []
+                self.state = FSMState.PASSING_THROUGH_INVALID
+                
+            return self._emit("lane_following", ans)
 
-        # ── PASSING_THROUGH ───────────────────────────────────────────────────
-        if self.state == FSMState.PASSING_THROUGH:
-            self.left_buf.append(1 - flag)
-            self.at_buf = []
-            if self._confirmed(self.left_buf, self.cfg.left_intersection_window):
+        # ── PASSING_THROUGH_VALID / INVALID ───────────────────────────────────
+        if self.state in (FSMState.PASSING_THROUGH_VALID, FSMState.PASSING_THROUGH_INVALID):
+            if ans == "no":
+                self.none_buf.append(1)
+            else:
+                self.none_buf = []
+                
+            if self._confirmed(self.none_buf, self.cfg.left_intersection_window):
                 self.state    = FSMState.LANE_FOLLOWING
-                self.left_buf = []
-            return self._emit("straight", at_intersection)
+                self.none_buf = []
+            return self._emit("straight", ans)
 
         # ── EXECUTING ─────────────────────────────────────────────────────────
         if self.state == FSMState.EXECUTING:
             action, _ = self._current
-            self.left_buf.append(1 - flag)
-            self.at_buf = []
-            if self._confirmed(self.left_buf, self.cfg.left_intersection_window):
+            if ans == "no":
+                self.none_buf.append(1)
+            else:
+                self.none_buf = []
+                
+            if self._confirmed(self.none_buf, self.cfg.left_intersection_window):
                 self.plan.pop(0)
                 nxt, _ = self._current
                 self.state    = FSMState.DONE if (nxt == "stop" or not self.plan) \
                                 else FSMState.LANE_FOLLOWING
                 self.cooldown = self.cfg.cooldown_frames
-                self.left_buf = []
-            return self._emit(action, at_intersection)
+                self.none_buf = []
+            return self._emit(action, ans)
 
-        return self._emit("lane_following", at_intersection)
+        return self._emit("lane_following", ans)
 
-    def _emit(self, intent: str, at_intersection: bool) -> str:
+    def _emit(self, intent: str, ans: str) -> str:
         self.log.append(dict(
             frame=self.frame, state=self.state.name,
-            at_intersection=at_intersection, intent=intent,
+            ans=ans, intent=intent,
             count=self.count, remaining=list(self.plan),
         ))
         return intent
@@ -196,11 +215,13 @@ class NavFSM:
 # SmolVLM2 oracle
 # ─────────────────────────────────────────────────────────────────────────────
 
-PROMPT = (
-    "This is a semantic segmentation mask of a forward-facing camera image from a Duckietown autonomous robot "
-    "driving on a road. Is the robot currently at an intersection or road crossing "
-    "(not just seeing one far ahead, but actually at one right now)? "
-    "Answer with one word only: yes or no."
+PROMPT_TEMPLATE = (
+    "This is a forward-facing camera image from a Duckietown autonomous robot driving on a road. "
+    "Look at the road ahead. "
+    "If the robot is NOT at an intersection, answer 'no'. "
+    "If the robot is at an intersection and it is possible to go {direction}, answer 'yes'. "
+    "If the robot is at an intersection but it is IMPOSSIBLE to go {direction}, answer 'pass'. "
+    "Answer with exactly one word: yes, no, or pass."
 )
 
 
@@ -258,10 +279,11 @@ class VLMOracle:
             self.model = self.model.to(self.device)
         self.model.eval()
 
-        # Resolve yes/no token IDs once at load time
-        self.yes_ids = self._token_ids(["yes", "Yes", "YES"])
-        self.no_ids  = self._token_ids(["no",  "No",  "NO"])
-        print(f"Ready.  yes_ids={self.yes_ids}  no_ids={self.no_ids}")
+        # Resolve yes/no/pass token IDs once at load time
+        self.yes_ids  = self._token_ids(["yes", "Yes", "YES"])
+        self.no_ids   = self._token_ids(["no",  "No",  "NO"])
+        self.pass_ids = self._token_ids(["pass", "Pass", "PASS"])
+        print(f"Ready. yes={self.yes_ids} no={self.no_ids} pass={self.pass_ids}")
 
     def _token_ids(self, words: List[str]) -> List[int]:
         ids = set()
@@ -269,16 +291,19 @@ class VLMOracle:
             ids.update(self.processor.tokenizer.encode(w, add_special_tokens=False))
         return list(ids)
 
-    def at_intersection(self, image: Image.Image) -> Tuple[bool, float]:
+    def at_intersection(self, image: Image.Image, direction: str = "straight") -> Tuple[str, float]:
         """
-        Returns (at_intersection: bool, confidence: float).
-        Confidence is the softmax probability of 'yes' vs 'no'.
+        Returns (answer: str, confidence: float).
+        Answer is one of 'yes', 'no', 'pass'.
+        Confidence is the softmax probability of the chosen class.
         """
         import torch
         
+        prompt_text = PROMPT_TEMPLATE.format(direction=direction)
+        
         messages = [{"role": "user", "content": [
             {"type": "image"},
-            {"type": "text", "text": PROMPT},
+            {"type": "text", "text": prompt_text},
         ]}]
         
         with torch.no_grad():
@@ -287,13 +312,16 @@ class VLMOracle:
             inputs = {k: v.to(self.model.device) for k, v in inputs.items()}
 
             logits   = self.model(**inputs).logits[0, -1, :]   # next-token logits
-            yes_logit = logits[self.yes_ids].max().item()
-            no_logit  = logits[self.no_ids ].max().item()
-            yes_conf  = torch.softmax(
-                torch.tensor([yes_logit, no_logit]), dim=0
-            )[0].item()
+            yes_logit  = logits[self.yes_ids].max().item()
+            no_logit   = logits[self.no_ids ].max().item()
+            pass_logit = logits[self.pass_ids].max().item()
+            
+            probs = torch.softmax(torch.tensor([yes_logit, no_logit, pass_logit]), dim=0)
+            max_idx = probs.argmax().item()
+            conf = probs[max_idx].item()
+            ans = ["yes", "no", "pass"][max_idx]
 
-        return yes_conf > 0.5, yes_conf
+        return ans, conf
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -309,11 +337,16 @@ class Navigator:
         print(f"Plan        : {plan}\n")
 
     def step(self, image: Image.Image) -> dict:
-        at_inter, conf = self.vlm.at_intersection(image)
-        intent         = self.fsm.step(at_inter)
+        current_target = self.fsm._current[0] if not self.fsm.done else "straight"
+        if current_target == "stop":
+            current_target = "straight"
+            
+        ans, conf = self.vlm.at_intersection(image, direction=current_target)
+        intent    = self.fsm.step(ans)
+        
         return dict(
             intent          = intent,
-            at_intersection = at_inter,
+            at_intersection = ans,
             confidence      = conf,
             fsm_state       = self.fsm.state.name,
             done            = self.fsm.done,
@@ -329,7 +362,7 @@ class Navigator:
             result["frame"] = path.name
             results.append(result)
             print(f"  {path.name:30s}  "
-                  f"at_inter={'Y' if result['at_intersection'] else 'N'} "
+                  f"ans={result['at_intersection']:4s} "
                   f"({result['confidence']:.2f})  "
                   f"→ {result['intent']:14s}  "
                   f"[{result['fsm_state']}]  "

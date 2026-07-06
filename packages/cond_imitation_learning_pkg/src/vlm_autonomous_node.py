@@ -23,7 +23,7 @@ from vlm_planner import NavFSM, Config, parse_instruction, VLMOracle
 
 class VLMWorker(QThread):
     # Signals for updating UI
-    update_signal = pyqtSignal(str, str, bool, float, int, str)
+    update_signal = pyqtSignal(str, str, str, float, int, str)
 
     def __init__(self, instruction: str, model_id: str, server_url: str = None):
         super().__init__()
@@ -56,7 +56,7 @@ class VLMWorker(QThread):
         self.update_signal.emit(
             str(self.fsm.plan),
             self.fsm.state.name,
-            False,
+            "no",
             0.0,
             self.fsm.count,
             "lane_following"
@@ -67,6 +67,10 @@ class VLMWorker(QThread):
         while self.running and not rospy.is_shutdown():
             if self.latest_image is not None and not self.fsm.done:
                 # Local or Remote Inference
+                current_target = self.fsm._current[0] if not self.fsm.done else "straight"
+                if current_target == "stop":
+                    current_target = "straight"
+                    
                 if self.server_url:
                     try:
                         # Compress to JPEG for faster network transfer
@@ -74,13 +78,14 @@ class VLMWorker(QThread):
                         if is_success:
                             response = requests.post(
                                 f"{self.server_url}/predict/vlm", 
+                                data={"direction": current_target},
                                 files={"file": ("frame.jpg", buffer.tobytes(), "image/jpeg")},
                                 timeout=15.0
                             )
                             if response.status_code == 200:
                                 data = response.json()
-                                at_inter = data["at_intersection"]
-                                conf = data["confidence"]
+                                ans = data.get("ans", "no")
+                                conf = data.get("confidence", 0.0)
                             else:
                                 rospy.logwarn_throttle(2.0, f"Server returned {response.status_code}")
                                 rate.sleep()
@@ -92,17 +97,17 @@ class VLMWorker(QThread):
                 else:
                     # Run purely locally (CPU heavy)
                     pil_image = Image.fromarray(self.latest_image)
-                    at_inter, conf = self.vlm.at_intersection(pil_image)
+                    ans, conf = self.vlm.at_intersection(pil_image, direction=current_target)
                 
                 # Step the navigator
-                intent = self.fsm.step(at_inter)
+                intent = self.fsm.step(ans)
                 plan_str = str(self.fsm.plan)
                 
                 # Emit signal to update UI and PilotNet intent
                 self.update_signal.emit(
                     plan_str,
                     self.fsm.state.name,
-                    at_inter,
+                    ans,
                     conf,
                     self.fsm.count,
                     intent
@@ -222,13 +227,12 @@ class VLMAutonomousDriverUI(AutonomousDriverUI):
         
         self.lbl_fsm.setText("FSM: STOPPED")
         
-    def on_vlm_update(self, plan_str, fsm_state, at_intersection, confidence, memory_count, intent):
+    def on_vlm_update(self, plan_str, fsm_state, ans, confidence, memory_count, intent):
         self.lbl_plan.setText(f"Plan: {plan_str}")
         self.lbl_fsm.setText(f"FSM: {fsm_state}")
         
-        ans_text = "YES" if at_intersection else "NO"
-        color = "#28a745" if at_intersection else "#dc3545"
-        self.lbl_vlm_ans.setText(f"VLM: {ans_text} ({confidence:.2f})")
+        color = "#28a745" if ans == "yes" else ("#ffc107" if ans == "pass" else "#dc3545")
+        self.lbl_vlm_ans.setText(f"VLM: {ans.upper()} ({confidence:.2f})")
         self.lbl_vlm_ans.setStyleSheet(f"font-family: monospace; font-size: 14px; color: {color}; font-weight: bold; background-color: #f8f9fa; padding: 5px; border: 1px solid #ccc;")
         
         self.lbl_memory.setText(f"Mem Count: {memory_count}")
@@ -240,13 +244,8 @@ class VLMAutonomousDriverUI(AutonomousDriverUI):
         super().update_ui(raw_img, model_img, out1, out2, intent)
         
         if self.vlm_worker and self.vlm_worker.running:
-            # For approach 2-5, model_img is the semantic segmentation mask (0, 85, 170, 255 for classes).
-            # Convert it back to a 3-channel image for the VLM.
-            if len(model_img.shape) == 2:
-                model_rgb = cv2.cvtColor(model_img, cv2.COLOR_GRAY2RGB)
-            else:
-                model_rgb = model_img.copy()
-            self.vlm_worker.set_image(model_rgb)
+            # send the raw image to the VLM, not the semantic mask.
+            self.vlm_worker.set_image(raw_img.copy())
 
     def closeEvent(self, event):
         self.stop_vlm_planner()

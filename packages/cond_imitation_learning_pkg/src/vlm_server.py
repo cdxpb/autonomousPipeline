@@ -2,7 +2,7 @@
 import io
 import torch
 import uvicorn
-from fastapi import FastAPI, File, UploadFile
+from fastapi import FastAPI, File, UploadFile, Form
 from fastapi.responses import JSONResponse
 from PIL import Image
 
@@ -30,15 +30,15 @@ def startup_event():
     server.load_vlm()
 
 @app.post("/predict/vlm")
-async def predict_vlm(file: UploadFile = File(...)):
+async def predict_vlm(file: UploadFile = File(...), direction: str = Form("straight")):
     contents = await file.read()
     image = Image.open(io.BytesIO(contents)).convert("RGB")
     
     # Run inference
-    at_intersection, confidence = server.vlm_oracle.at_intersection(image)
+    ans, confidence = server.vlm_oracle.at_intersection(image, direction)
     
     return JSONResponse({
-        "at_intersection": at_intersection,
+        "ans": ans,
         "confidence": confidence
     })
 
