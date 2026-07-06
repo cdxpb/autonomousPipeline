@@ -90,6 +90,12 @@ class AutonomousDriverUI(QMainWindow):
         elif self.approach == 5:
             self.model_path = "../autonomouspipeline/models/pilotnet/best_model_regNheadv2"
             self.yolo_path = "../autonomouspipeline/models/yolo_model/yolo_model.onnx"
+        elif self.approach == 6:
+            self.model_path = "../autonomouspipeline/models/pilotnet/best_model_approach6"
+            self.yolo_path = "../autonomouspipeline/models/yolo_model/yolo_model.onnx"
+        elif self.approach == 7:
+            self.model_path = "../autonomouspipeline/models/pilotnet/best_model_approach7"
+            self.yolo_path = "../autonomouspipeline/models/yolo_model/yolo_model.onnx"
 
         self.transform = get_eval_transforms()
         self.frame_buffer = []
@@ -266,6 +272,12 @@ class AutonomousDriverUI(QMainWindow):
                 elif self.approach == 5:
                     from pilotnet_regNheadv2 import ConditionalPilotNet
                     self.pt_model = ConditionalPilotNet().to(self.device)
+                elif self.approach == 6:
+                    from pilotnet_classNhead import ConditionalPilotNet
+                    self.pt_model = ConditionalPilotNet().to(self.device)
+                elif self.approach == 7:
+                    from pilotnet_FiLM import ConditionalPilotNetFiLM
+                    self.pt_model = ConditionalPilotNetFiLM().to(self.device)
                 else:
                     from pilotnet import ConditionalPilotNet
                     self.pt_model = ConditionalPilotNet(in_channels=3 if self.skip_segmentation else 1).to(self.device)
@@ -289,7 +301,8 @@ class AutonomousDriverUI(QMainWindow):
                     self.d_output = cuda.mem_alloc(1 * 2 * 4)
                     self.bindings = [int(self.d_img_in), int(self.d_vel_in), int(self.d_intent_in), int(self.d_output)]
                 else:
-                    self.d_output = cuda.mem_alloc(1 * (4 if self.approach == 3 else 2) * 4)
+                    out_size = 4 if self.approach == 3 else (3 if self.approach == 6 else 2)
+                    self.d_output = cuda.mem_alloc(1 * out_size * 4)
                     self.bindings = [int(self.d_img_in), int(self.d_intent_in), int(self.d_output)]
 
             # Switch UI State
@@ -373,7 +386,8 @@ class AutonomousDriverUI(QMainWindow):
                 self.d_output = cuda.mem_alloc(1 * 2 * 4)
                 self.bindings = [int(self.d_img_in), int(self.d_vel_in), int(self.d_intent_in), int(self.d_output)]
             else:
-                self.d_output = cuda.mem_alloc(1 * (4 if self.approach == 3 else 2) * 4)
+                out_size = 4 if self.approach == 3 else (3 if self.approach == 6 else 2)
+                self.d_output = cuda.mem_alloc(1 * out_size * 4)
                 self.bindings = [int(self.d_img_in), int(self.d_intent_in), int(self.d_output)]
         else:
             self.ort_session = ort.InferenceSession(f"{self.model_path}.onnx")
@@ -408,7 +422,7 @@ class AutonomousDriverUI(QMainWindow):
                 cropped_img = crop_image(pil_image)
 
                 with torch.no_grad():
-                    if self.approach == 5:
+                    if self.approach in [5, 6, 7]:
                         yolo_results = self.yolo_session(cropped_img, verbose=False)
                     else:
                         yolo_results = self.yolo_session(pil_image, verbose=False)
@@ -416,7 +430,7 @@ class AutonomousDriverUI(QMainWindow):
                 mask = yolo_results[0].semantic_mask.data.cpu()
                 mask_pil = Image.fromarray(mask.numpy())
 
-                if self.approach != 5:
+                if self.approach not in [5, 6, 7]:
                     mask_pil = crop_image(mask_pil)
 
                 resized_mask_pil = mask_pil.resize((224, 112), Image.NEAREST)
@@ -461,6 +475,12 @@ class AutonomousDriverUI(QMainWindow):
                             #     out1, out2 = self.action_to_twist(pred_action)
                             # else:
                             #     out1, out2 = self.action_to_vel(pred_action)
+                        elif self.approach == 6:
+                            pred_action = torch.argmax(output, dim=1).cpu().item()
+                            if self.output_mode == "twist":
+                                out1, out2 = self.action_to_twist(pred_action)
+                            else:
+                                out1, out2 = self.action_to_vel(pred_action)
                         else:
                             out1, out2 = output[0][0].item(), output[0][1].item()
 
@@ -471,9 +491,9 @@ class AutonomousDriverUI(QMainWindow):
                         vel_tensor = np.array([[self.prev_out1, self.prev_out2]], dtype=np.float32)
                         cuda.memcpy_htod(self.d_vel_in, vel_tensor)
                     self.context.execute_v2(bindings=self.bindings)
-                    h_output = np.empty((1, 4 if self.approach == 3 else 2), dtype=np.float32)
+                    h_output = np.empty((1, 4 if self.approach == 3 else (3 if self.approach == 6 else 2)), dtype=np.float32)
                     cuda.memcpy_dtoh(h_output, self.d_output)
-                    if self.approach == 3:
+                    if self.approach in [3, 6]:
                         pred_action = np.argmax(h_output[0])
                         if self.output_mode == "twist":
                             out1, out2 = self.action_to_twist(pred_action)
@@ -525,7 +545,7 @@ class AutonomousDriverUI(QMainWindow):
 
                     try:
                         ort_outs = self.ort_session.run(None, ort_inputs)
-                        if self.approach == 3:
+                        if self.approach in [3, 6]:
                             pred_action = np.argmax(ort_outs[0][0])
                             if self.output_mode == "twist":
                                 out1, out2 = self.action_to_twist(pred_action)
@@ -600,7 +620,7 @@ class AutonomousDriverUI(QMainWindow):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Autonomous Driver Dashboard Node")
-    parser.add_argument("--approach", type=int, choices=[0, 2, 3, 4, 5], default=2, help="0: skip segmentation, 2: segmentation + regression, 3: segmentation + classification, 4: segmentation + regression temporal, 5: segmentation + regression 4 heads (regNheadv2)")
+    parser.add_argument("--approach", type=int, choices=[0, 2, 3, 4, 5, 6, 7], default=2, help="0: skip segmentation, 2: segmentation + regression, 3: segmentation + classification, 4: segmentation + regression temporal, 5: segmentation + regression 4 heads (regNheadv2), 6: segmentation + classification 4 heads (classNhead), 7: segmentation + regression FiLM (FiLM)")
     parser.add_argument("--skip_segmentation", action="store_true", help="Deprecated. Use --approach 0 instead.")
     parser.add_argument("--output_mode", type=str, choices=["twist", "wheels"], default=None, help="Output mode for driving commands. Defaults to wheels for approach 0/2, twist for approach 3.")
     args, unknown = parser.parse_known_args(rospy.myargv()[1:])
