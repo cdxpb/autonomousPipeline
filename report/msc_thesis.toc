@@ -1,10 +1,12 @@
-\contentsline {chapter}{\numberline {1}Introduction}{9}{}%
-\contentsline {chapter}{\numberline {2}Method}{11}{}%
-\contentsline {section}{\numberline {2.1}Data Collection}{11}{}%
-\contentsline {section}{\numberline {2.2}YOLO segmentation model}{11}{}%
-\contentsline {section}{\numberline {2.3}Conditional Imitation Learning}{11}{}%
-\contentsline {section}{\numberline {2.4}Getting High Level Commands from a VLM}{11}{}%
-\contentsline {chapter}{\numberline {3}Experiments and Ablations}{13}{}%
-\contentsline {chapter}{\numberline {4}Conclusion and Future Work}{15}{}%
-\contentsline {chapter}{\numberline {A}Contributions}{17}{}%
+\contentsline {chapter}{\numberline {1}Introduction}{5}{}%
+\contentsline {chapter}{\numberline {2}Method}{6}{}%
+\contentsline {section}{\numberline {2.1}Data Collection}{6}{}%
+\contentsline {section}{\numberline {2.2}YOLO segmentation model}{6}{}%
+\contentsline {section}{\numberline {2.3}Conditional Imitation Learning}{6}{}%
+\contentsline {section}{\numberline {2.4}Getting High Level Commands from a VLM}{6}{}%
+\contentsline {chapter}{\numberline {3}Experiments and Ablations}{7}{}%
+\contentsline {section}{\numberline {3.1}Results}{7}{}%
+\contentsline {chapter}{\numberline {4}Conclusion and Future Work}{9}{}%
+\contentsline {chapter}{\numberline {A}Pictures of Task Definitions?}{10}{}%
+\contentsline {chapter}{\numberline {B}Contributions}{11}{}%
 \providecommand \tocbasic@end@toc@file {}\tocbasic@end@toc@file 
