@@ -8,9 +8,9 @@ ARG ICON="cube"
 # ==================================================>
 # ==> Do not change the code below this line
 ARG ARCH
-ARG DISTRO=daffy
+ARG DISTRO=ente
 ARG DOCKER_REGISTRY=docker.io
-ARG BASE_IMAGE=dt-ros-commons
+ARG BASE_IMAGE=dt-machine-learning-base-pytorch
 ARG BASE_TAG=${DISTRO}-${ARCH}
 ARG LAUNCHER=default
 
@@ -58,8 +58,13 @@ RUN dt-apt-install ${REPO_PATH}/dependencies-apt.txt
 # install python3 dependencies
 ARG PIP_INDEX_URL="https://pypi.org/simple"
 ENV PIP_INDEX_URL=${PIP_INDEX_URL}
+
+# install python dependencies
 COPY ./dependencies-py3.* "${REPO_PATH}/"
 RUN dt-pip3-install "${REPO_PATH}/dependencies-py3.*"
+
+# Install ultralytics safely WITHOUT dependencies to avoid overwriting GPU torch wheels
+RUN pip3 install --no-deps ultralytics
 
 # copy the source code
 COPY ./packages "${REPO_PATH}/packages"
