@@ -73,7 +73,7 @@ class HeadlessAutonomousNode:
         self.prev_out1 = 0.0
         self.prev_out2 = 0.0
         
-        self.target_fps = 30
+        self.target_fps = 15
         self.last_frame_time = 0.0
 
         self.backend = rospy.get_param("~backend", "pytorch")

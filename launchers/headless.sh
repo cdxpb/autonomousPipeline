@@ -21,6 +21,9 @@ echo "======================================================="
 # Force-remove the stale devel wrapper so catkin always reinstalls it fresh
 rm -f /code/catkin_ws/devel/lib/cond_imitation_learning_pkg/headless_autonomous_node.py
 source /opt/ros/noetic/setup.sh
+# Set the global camera framerate down to 15 FPS to reduce source load
+rosparam set /$VEHICLE_NAME/camera_node/framerate 15
+
 catkin build --workspace /code/catkin_ws/ --no-status 2>&1 | tail -3
 source /code/catkin_ws/devel/setup.bash
 
