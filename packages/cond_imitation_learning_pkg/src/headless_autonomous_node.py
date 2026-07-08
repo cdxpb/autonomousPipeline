@@ -78,16 +78,25 @@ class HeadlessAutonomousNode:
 
         self.backend = rospy.get_param("~backend", "pytorch")
 
-        # ── YOLO (always ONNX on robot; bypasses ultralytics entirely) ─────────
+        # ── YOLO ─────────
         if not self.skip_segmentation:
-            rospy.loginfo(f"Loading YOLO ONNX from {self.yolo_path} ...")
-            if not os.path.exists(self.yolo_path):
-                rospy.logfatal(f"YOLO model not found at {self.yolo_path}. Run ./transfer_models.sh --all")
-                raise FileNotFoundError(self.yolo_path)
-            # Use CUDA if available, otherwise CPU
-            yolo_providers = ['CUDAExecutionProvider', 'CPUExecutionProvider']
-            self.yolo_ort = ort.InferenceSession(self.yolo_path, providers=yolo_providers)
-            rospy.loginfo(f"YOLO ONNX running on: {self.yolo_ort.get_providers()}")
+            if self.backend.lower() in ["onnx", "tensorrt"]:
+                self.yolo_path = f"{MODEL_BASE}/yolo_model/yolo_model.onnx"
+                rospy.loginfo(f"Loading YOLO ONNX from {self.yolo_path} ...")
+                if not os.path.exists(self.yolo_path):
+                    rospy.logfatal(f"YOLO model not found at {self.yolo_path}. Run ./transfer_models.sh --all")
+                    raise FileNotFoundError(self.yolo_path)
+                yolo_providers = ['CUDAExecutionProvider', 'CPUExecutionProvider']
+                self.yolo_ort = ort.InferenceSession(self.yolo_path, providers=yolo_providers)
+                rospy.loginfo(f"YOLO ONNX running on: {self.yolo_ort.get_providers()}")
+            else:
+                self.yolo_path = f"{MODEL_BASE}/yolo_model/yolo_model.pt"
+                rospy.loginfo(f"Loading YOLO PyTorch from {self.yolo_path} ...")
+                if not os.path.exists(self.yolo_path):
+                    rospy.logfatal(f"YOLO model not found at {self.yolo_path}. Run ./transfer_models.sh --all")
+                    raise FileNotFoundError(self.yolo_path)
+                from ultralytics import YOLO
+                self.yolo_session = YOLO(self.yolo_path, task='semantic')
 
         # ── PilotNet ──────────────────────────────────────────────────────────
         onnx_path = f"{self.model_path}.onnx"
@@ -148,15 +157,20 @@ class HeadlessAutonomousNode:
             pil_image = Image.fromarray(rgb_image)
             cropped_img = crop_image(pil_image)  # PIL RGB, cropped
 
-            # ── YOLO semantic segmentation via ONNX ───────────────────────
-            # Resize to YOLO input size, normalise, CHW
-            yolo_in = cv2.resize(
-                np.array(cropped_img), (YOLO_INPUT_W, YOLO_INPUT_H)
-            ).astype(np.float32) / 255.0                        # HWC float32
-            yolo_in = yolo_in.transpose(2, 0, 1)[np.newaxis]   # [1,3,H,W]
-            logits = self.yolo_ort.run(None, {'images': yolo_in})[0]  # [1,4,H,W]
-            # argmax over class dim → uint8 class map {0,1,2,3}, shape [H,W]
-            seg_map = np.argmax(logits[0], axis=0).astype(np.uint8)
+            # ── YOLO semantic segmentation ───────────────────────
+            if self.backend.lower() in ["onnx", "tensorrt"]:
+                # Resize to YOLO input size, normalise, CHW
+                yolo_in = cv2.resize(
+                    np.array(cropped_img), (YOLO_INPUT_W, YOLO_INPUT_H)
+                ).astype(np.float32) / 255.0                        # HWC float32
+                yolo_in = yolo_in.transpose(2, 0, 1)[np.newaxis]   # [1,3,H,W]
+                logits = self.yolo_ort.run(None, {'images': yolo_in})[0]  # [1,4,H,W]
+                # argmax over class dim → uint8 class map {0,1,2,3}, shape [H,W]
+                seg_map = np.argmax(logits[0], axis=0).astype(np.uint8)
+            else:
+                with torch.no_grad():
+                    yolo_results = self.yolo_session(cropped_img, verbose=False, device=self.device.type)
+                seg_map = yolo_results[0].semantic_mask.data.cpu().numpy().astype(np.uint8)
 
             # Resize to PilotNet input size [112, 224]
             mask_resized = cv2.resize(seg_map, (224, 112), interpolation=cv2.INTER_NEAREST)
