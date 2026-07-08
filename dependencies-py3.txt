@@ -2,7 +2,10 @@
 # NOTE: only place non-Duckietown libraries here; pin versions only if necessary
 opencv-python-headless
 cvbridge3
+torch==2.0.0
+torchvision==0.15.1
 pillow
 onnxruntime
+ultralytics
 requests
 onnx

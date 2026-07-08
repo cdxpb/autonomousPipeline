@@ -9,7 +9,7 @@ dt-launchfile-init
 # ----------------------------------------------------------------------------
 
 APPROACH="${APPROACH:-7}"
-BACKEND="${BACKEND:-pytorch}"
+BACKEND="${BACKEND:-onnx}"
 
 echo "======================================================="
 echo " Duckiebot Headless Inference Launcher"
