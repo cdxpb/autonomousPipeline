@@ -70,8 +70,6 @@ class HeadlessAutonomousNode:
             self.model_path = f"{MODEL_BASE}/pilotnet/best_model_approach7"
             self.yolo_path  = f"{MODEL_BASE}/yolo_model/yolo_model.onnx"
 
-        self.transform = get_eval_transforms()
-        self.frame_buffer = []
         self.prev_out1 = 0.0
         self.prev_out2 = 0.0
         
