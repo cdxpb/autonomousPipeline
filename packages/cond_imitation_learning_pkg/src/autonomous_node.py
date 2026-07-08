@@ -677,16 +677,16 @@ class AutonomousDriverUI(QMainWindow):
     def update_ui(self, raw_img, model_img, out1, out2, intent):
         # 1. Render Raw Camera View
         h, w, ch = raw_img.shape
-        qt_raw = QImage(raw_img.data, w, h, ch * w, QImage.Format_RGB888)
+        qt_raw = QImage(raw_img.tobytes(), w, h, ch * w, QImage.Format_RGB888)
         self.live_label.setPixmap(QPixmap.fromImage(qt_raw).scaled(self.live_label.width(), self.live_label.height(), Qt.KeepAspectRatio))
 
-        # 2. Render Network Input Image
-        if len(model_img.shape) == 2:  # Grayscale Mask
-            mh, mw = model_img.shape
-            qt_model = QImage(model_img.data, mw, mh, mw, QImage.Format_Indexed8)
-        else:  # RGB Cropped Image
-            mh, mw, mch = model_img.shape
-            qt_model = QImage(model_img.data, mw, mh, mch * mw, QImage.Format_RGB888)
+        mh, mw = model_img.shape[:2]
+        if len(model_img.shape) == 2:
+            # Grayscale Mask
+            qt_model = QImage(model_img.tobytes(), mw, mh, mw, QImage.Format_Indexed8)
+        else:
+            mch = model_img.shape[2]
+            qt_model = QImage(model_img.tobytes(), mw, mh, mch * mw, QImage.Format_RGB888)
             
         self.model_label.setPixmap(QPixmap.fromImage(qt_model).scaled(self.model_label.width(), self.model_label.height(), Qt.KeepAspectRatio))
 
