@@ -187,25 +187,16 @@ class HeadlessAutonomousNode:
                     pt_tensor = torch.from_numpy(img_tensor).to(self.device)
                     
                     # Expand intent vector
-                    intent_idx = INTENT_MAP.get(self.current_intent, 0)
-                    if self.approach == 7:
-                        # FiLM expects one-hot intent [1, 4]
-                        one_hot = torch.zeros((1, 4), dtype=torch.float32, device=self.device)
-                        one_hot[0, intent_idx] = 1.0
-                        intent_tensor = one_hot
-                    else:
-                        intent_tensor = torch.tensor([[intent_idx]], dtype=torch.float32, device=self.device)
+                    # INTENT_MAP natively returns a one-hot list like [1.0, 0.0, 0.0, 0.0]
+                    intent_list = INTENT_MAP.get(self.current_intent, [1.0, 0.0, 0.0, 0.0])
+                    intent_tensor = torch.tensor([intent_list], dtype=torch.float32, device=self.device)
 
                     output = self.pt_model(pt_tensor, intent_tensor)
                     out1, out2 = output[0][0].item(), output[0][1].item()
                 else:
-                    intent_idx = INTENT_MAP.get(self.current_intent, 0)
-                    if self.approach == 7:
-                        # FiLM expects one-hot intent [1, 4]
-                        intent_val = np.zeros((1, 4), dtype=np.float32)
-                        intent_val[0, intent_idx] = 1.0
-                    else:
-                        intent_val = np.array([[intent_idx]], dtype=np.float32)
+                    # INTENT_MAP natively returns a one-hot list like [1.0, 0.0, 0.0, 0.0]
+                    intent_list = INTENT_MAP.get(self.current_intent, [1.0, 0.0, 0.0, 0.0])
+                    intent_val = np.array([intent_list], dtype=np.float32)
                     
                     ort_inputs = {
                         "image_input": img_tensor,
