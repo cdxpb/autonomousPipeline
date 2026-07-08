@@ -19,6 +19,33 @@ FROM ${DOCKER_REGISTRY}/duckietown/${BASE_IMAGE}:${BASE_TAG} as base
 
 # Rescue NVIDIA and CUDA libraries from the official L4T container since Duckietown OS strips them
 FROM nvcr.io/nvidia/l4t-ml:r32.7.1-py3 AS cuda-rescue
+RUN mkdir -p /export && \
+    cp -L /usr/lib/aarch64-linux-gnu/libcudnn.so.8 /export/ || true && \
+    cp -L /usr/lib/aarch64-linux-gnu/libcudnn_cnn_infer.so.8 /export/ || true && \
+    cp -L /usr/lib/aarch64-linux-gnu/libcudnn_cnn_train.so.8 /export/ || true && \
+    cp -L /usr/lib/aarch64-linux-gnu/libcudnn_ops_infer.so.8 /export/ || true && \
+    cp -L /usr/lib/aarch64-linux-gnu/libcudnn_ops_train.so.8 /export/ || true && \
+    cp -L /usr/lib/aarch64-linux-gnu/libcudnn_adv_infer.so.8 /export/ || true && \
+    cp -L /usr/lib/aarch64-linux-gnu/libcudnn_adv_train.so.8 /export/ || true && \
+    cp -L /usr/lib/aarch64-linux-gnu/libcublas.so.10 /export/ || true && \
+    cp -L /usr/lib/aarch64-linux-gnu/libcublasLt.so.10 /export/ || true && \
+    cp -L /usr/lib/aarch64-linux-gnu/libnvinfer.so.7 /export/ || true && \
+    cp -L /usr/lib/aarch64-linux-gnu/libnvinfer_plugin.so.7 /export/ || true && \
+    cp -L /usr/lib/aarch64-linux-gnu/libnvparsers.so.7 /export/ || true && \
+    cp -L /usr/lib/aarch64-linux-gnu/libnvonnxparser.so.7 /export/ || true && \
+    cp -L /usr/lib/aarch64-linux-gnu/libmyelin.so.1 /export/ || true && \
+    cp -L /usr/lib/aarch64-linux-gnu/libcuda.so.1 /export/ || true && \
+    cp -L /usr/local/cuda-10.2/targets/aarch64-linux/lib/libcurand.so.10 /export/ || true && \
+    cp -L /usr/local/cuda-10.2/targets/aarch64-linux/lib/libcufft.so.10 /export/ || true && \
+    cp -L /usr/local/cuda-10.2/targets/aarch64-linux/lib/libcusparse.so.10 /export/ || true && \
+    cp -L /usr/local/cuda-10.2/targets/aarch64-linux/lib/libcusolver.so.10 /export/ || true && \
+    cp -L /usr/local/cuda-10.2/targets/aarch64-linux/lib/libnvToolsExt.so.1 /export/ || true && \
+    cp -L /usr/lib/aarch64-linux-gnu/tegra/libnvidia-glcore.so.* /export/ || true && \
+    cp -L /usr/lib/aarch64-linux-gnu/tegra/libnvidia-ptxjitcompiler.so.* /export/ || true && \
+    cp -L /usr/lib/aarch64-linux-gnu/tegra/libnvidia-fatbinaryloader.so.* /export/ || true && \
+    cp -L /usr/lib/aarch64-linux-gnu/tegra/libnvidia-eglcore.so.* /export/ || true && \
+    cp -L /usr/lib/aarch64-linux-gnu/tegra/libnvidia-tls.so.* /export/ || true && \
+    cp -L /usr/lib/aarch64-linux-gnu/tegra/libnvidia-glsi.so.* /export/ || true
 
 FROM base
 
@@ -61,22 +88,13 @@ RUN apt-get update && apt-get install -y curl gnupg2 && curl -s https://raw.gith
 RUN dt-apt-install ${REPO_PATH}/dependencies-apt.txt
 
 # Rescue stripped CUDA/TensorRT/Driver libraries from the official NVIDIA container
-RUN mkdir -p /opt/nvidia-rescue/tegra
-COPY --from=cuda-rescue /usr/local/cuda-10.2 /opt/nvidia-rescue/cuda-10.2
-COPY --from=cuda-rescue /usr/lib/aarch64-linux-gnu/libcudnn* /opt/nvidia-rescue/
-COPY --from=cuda-rescue /usr/lib/aarch64-linux-gnu/libcublas* /opt/nvidia-rescue/
-COPY --from=cuda-rescue /usr/lib/aarch64-linux-gnu/libnvinfer* /opt/nvidia-rescue/
-COPY --from=cuda-rescue /usr/lib/aarch64-linux-gnu/libnvparsers* /opt/nvidia-rescue/
-COPY --from=cuda-rescue /usr/lib/aarch64-linux-gnu/libnvonnxparser* /opt/nvidia-rescue/
-COPY --from=cuda-rescue /usr/lib/aarch64-linux-gnu/libmyelin* /opt/nvidia-rescue/
-COPY --from=cuda-rescue /usr/lib/aarch64-linux-gnu/libnvblas* /opt/nvidia-rescue/
-COPY --from=cuda-rescue /usr/lib/aarch64-linux-gnu/libcuda* /opt/nvidia-rescue/
-COPY --from=cuda-rescue /usr/lib/aarch64-linux-gnu/tegra/* /opt/nvidia-rescue/tegra/
+RUN mkdir -p /opt/nvidia-rescue
+COPY --from=cuda-rescue /export/* /opt/nvidia-rescue/
 
 # install python3 dependencies
 ARG PIP_INDEX_URL="https://pypi.org/simple"
 ENV PIP_INDEX_URL=${PIP_INDEX_URL} \
-    LD_LIBRARY_PATH=/opt/nvidia-rescue:/opt/nvidia-rescue/tegra:/opt/nvidia-rescue/cuda-10.2/lib64:${LD_LIBRARY_PATH}
+    LD_LIBRARY_PATH=/opt/nvidia-rescue:${LD_LIBRARY_PATH}
 
 # install python dependencies
 COPY ./dependencies-py3.* "${REPO_PATH}/"
