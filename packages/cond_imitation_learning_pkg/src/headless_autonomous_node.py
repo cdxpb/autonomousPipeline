@@ -183,18 +183,36 @@ class HeadlessAutonomousNode:
             # PilotNet Inference
             out1, out2 = 0.0, 0.0
             if self.current_intent != "stop":
-                intent_tensor = np.array([INTENT_MAP.get(self.current_intent, [1.0, 0.0, 0.0, 0.0])], dtype=np.float32)
-                
                 if self.pt_model is not None:
-                    img_t = torch.from_numpy(img_tensor).to(self.device)
-                    intent_t = torch.from_numpy(intent_tensor).to(self.device)
-                    with torch.no_grad():
-                        output = self.pt_model(img_t, intent_t)
+                    pt_tensor = torch.from_numpy(img_tensor).to(self.device)
+                    
+                    # Expand intent vector
+                    intent_idx = INTENT_MAP.get(self.current_intent, 0)
+                    if self.approach == 7:
+                        # FiLM expects one-hot intent [1, 4]
+                        one_hot = torch.zeros((1, 4), dtype=torch.float32, device=self.device)
+                        one_hot[0, intent_idx] = 1.0
+                        intent_tensor = one_hot
+                    else:
+                        intent_tensor = torch.tensor([[intent_idx]], dtype=torch.float32, device=self.device)
+
+                    output = self.pt_model(pt_tensor, intent_tensor)
                     out1, out2 = output[0][0].item(), output[0][1].item()
                 else:
-                    ort_inputs = {self.ort_session.get_inputs()[0].name: img_tensor, self.ort_session.get_inputs()[1].name: intent_tensor}
-                    output = self.ort_session.run(None, ort_inputs)
-                    out1, out2 = output[0][0][0].item(), output[0][0][1].item()
+                    intent_idx = INTENT_MAP.get(self.current_intent, 0)
+                    if self.approach == 7:
+                        # FiLM expects one-hot intent [1, 4]
+                        intent_val = np.zeros((1, 4), dtype=np.float32)
+                        intent_val[0, intent_idx] = 1.0
+                    else:
+                        intent_val = np.array([[intent_idx]], dtype=np.float32)
+                    
+                    ort_inputs = {
+                        "image_input": img_tensor,
+                        "intent_input": intent_val
+                    }
+                    output = self.ort_session.run(None, ort_inputs)[0]
+                    out1, out2 = output[0][0].item(), output[0][1].item()
 
             # Publish Motors
             if self.output_mode == "twist":

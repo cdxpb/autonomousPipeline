@@ -18,9 +18,15 @@ echo " Backend  : $BACKEND"
 echo "======================================================="
 
 # Re-build catkin workspace so rosrun can find newly synced scripts
+# Force-remove the stale devel wrapper so catkin always reinstalls it fresh
+rm -f /code/catkin_ws/devel/lib/cond_imitation_learning_pkg/headless_autonomous_node.py
 source /opt/ros/noetic/setup.sh
 catkin build --workspace /code/catkin_ws/ --no-status 2>&1 | tail -3
 source /code/catkin_ws/devel/setup.bash
+
+echo "=== CHECKING ACTUAL SCRIPT CONTENT ==="
+head -n 80 /code/catkin_ws/src/autonomousPipeline/packages/cond_imitation_learning_pkg/src/headless_autonomous_node.py | tail -n 15
+echo "======================================"
 
 # Verify models are present
 MODEL_BASE="/data/models"
