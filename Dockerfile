@@ -5,9 +5,6 @@ ARG MAINTAINER="Pankaj Bora borapankaj901@gmail.com"
 # pick an icon from: https://fontawesome.com/v4.7.0/icons/
 ARG ICON="cube"
 
-# Rescue NVIDIA and CUDA libraries from the official L4T container since Duckietown OS strips them
-FROM nvcr.io/nvidia/l4t-ml:r32.7.1-py3 AS cuda-rescue
-
 # ==================================================>
 # ==> Do not change the code below this line
 ARG ARCH
@@ -19,6 +16,11 @@ ARG LAUNCHER=default
 
 # define base image
 FROM ${DOCKER_REGISTRY}/duckietown/${BASE_IMAGE}:${BASE_TAG} as base
+
+# Rescue NVIDIA and CUDA libraries from the official L4T container since Duckietown OS strips them
+FROM nvcr.io/nvidia/l4t-ml:r32.7.1-py3 AS cuda-rescue
+
+FROM base
 
 # recall all arguments
 ARG DISTRO
