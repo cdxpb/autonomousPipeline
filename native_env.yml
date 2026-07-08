@@ -1,0 +1,25 @@
+name: ros_native
+channels:
+  - robostack-staging
+  - conda-forge
+  - pytorch
+  - defaults
+dependencies:
+  - python=3.9
+  - ros-noetic-desktop
+  - catkin_tools
+  - compilers
+  - cmake
+  - pkg-config
+  - make
+  - ninja
+  - colcon-common-extensions
+  - pytorch
+  - torchvision
+  - pyqt
+  - pip
+  - pip:
+      - ultralytics
+      - onnxruntime
+      - onnx
+      - pillow

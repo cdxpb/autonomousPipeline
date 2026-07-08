@@ -29,3 +29,13 @@ def get_eval_transforms():
         transforms.Resize(INPUT_SHAPE),
         transforms.ToTensor(),
     ])
+
+import torch.nn as nn
+class SafePool(nn.Module):
+    def __init__(self, size):
+        super().__init__()
+        self.pool = nn.AdaptiveAvgPool2d(size)
+    def forward(self, x):
+        if x.device.type == 'mps':
+            return self.pool(x.cpu()).to(x.device)
+        return self.pool(x)

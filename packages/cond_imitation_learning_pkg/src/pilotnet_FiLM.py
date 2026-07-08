@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+from utils import SafePool
 
 
 
@@ -78,7 +79,7 @@ class ConditionalPilotNetFiLM(nn.Module):
 
 
        # --- Dimensionality reduction ---
-       self.pool = nn.AdaptiveAvgPool2d((4, 7))
+       self.pool = SafePool((4, 7))
        self.flattened_size = 48 * 4 * 7  # 1344
 
 

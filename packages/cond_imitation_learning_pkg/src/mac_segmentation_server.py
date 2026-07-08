@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
 
-run the server: python3 mac_segmentation_server.py --model_path /path/to/yolo_model.onnx --device mps
+run the server: 
+python mac_segmentation_server.py --model_path /Users/pankajbora/dev/autonomousPipeline/models/yolo_model/yolo_model.onnx --device mps
    (Note: For ONNX models, the 'device' argument is typically ignored by Ultralytics as it defaults to the CPU via ONNXRuntime, unless you install onnxruntime-silicon for CoreML).
 """
 
@@ -10,6 +11,7 @@ import argparse
 import uvicorn
 import cv2
 import numpy as np
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, UploadFile, File
 from fastapi.responses import Response
 try:
@@ -18,12 +20,11 @@ except ImportError:
     print("Please install ultralytics: pip install ultralytics")
 from PIL import Image
 
-app = FastAPI(title="Mac MPS YOLO Segmentation Server")
 model = None
 args = None
 
-@app.on_event("startup")
-def startup_event():
+@asynccontextmanager
+async def lifespan(app: FastAPI):
     global model
     print(f"Loading YOLO model from {args.model_path} onto device={args.device}...")
     model = YOLO(args.model_path, task='semantic')
@@ -33,6 +34,9 @@ def startup_event():
     dummy_img = np.zeros((112, 224, 3), dtype=np.uint8)
     _ = model(dummy_img, device=args.device, verbose=False)
     print("Model loaded and pre-warmed.")
+    yield
+
+app = FastAPI(title="Mac MPS YOLO Segmentation Server", lifespan=lifespan)
 
 @app.post("/predict/segmentation")
 async def predict_segmentation(file: UploadFile = File(...)):

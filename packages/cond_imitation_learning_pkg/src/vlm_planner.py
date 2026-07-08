@@ -218,9 +218,9 @@ class NavFSM:
 PROMPT_TEMPLATE = (
     "This is a forward-facing camera image from a Duckietown autonomous robot driving on a road. "
     "Look at the road ahead. "
-    "If the robot is NOT at an intersection, answer 'no'. "
-    "If the robot is at an intersection and it is possible to go {direction}, answer 'yes'. "
-    "If the robot is at an intersection but it is IMPOSSIBLE to go {direction}, answer 'pass'. "
+    "If the robot is NOT at an intersection or T crossing, answer 'no'. "
+    "If the robot is at an intersection or T crossing and it is possible to go {direction}, answer 'yes'. "
+    "If the robot is at an intersection or T crossing but it is IMPOSSIBLE to go {direction}, answer 'pass'. "
     "Answer with exactly one word: yes, no, or pass."
 )
 

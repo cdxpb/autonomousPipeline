@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+from utils import SafePool
 
 class ConditionalPilotNet(nn.Module):
     def __init__(self, num_frames=3): # Added num_frames parameter
@@ -16,7 +17,7 @@ class ConditionalPilotNet(nn.Module):
             nn.Conv2d(64, 64, kernel_size=3, stride=1), nn.BatchNorm2d(64), nn.ReLU()
         )
 
-        self.pool = nn.AdaptiveAvgPool2d((5, 10))
+        self.pool = SafePool((5, 10))
         self.image_feature_size = 64 * 5 * 10 # 3200
 
         # 2. State Encoder for Previous Velocities

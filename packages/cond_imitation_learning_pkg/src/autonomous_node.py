@@ -74,30 +74,34 @@ class AutonomousDriverUI(QMainWindow):
 
         # State Flags
         self.is_autonomous_active = False
-        self.active_backend = None
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        if torch.cuda.is_available():
+            self.device = torch.device("cuda")
+        elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+            self.device = torch.device("mps")
+        else:
+            self.device = torch.device("cpu")
 
         # Model Paths
         if self.approach == 0:
             self.model_path = "../autonomouspipeline/models/pilotnet/best_model"
         elif self.approach == 2:
             self.model_path = "../autonomouspipeline/models/pilotnet/segPilot_approach2"
-            self.yolo_path = "../autonomouspipeline/models/yolo_model/yolo_model.onnx"
+            self.yolo_path = "../autonomouspipeline/models/yolo_model/yolo_v1_best.pt"
         elif self.approach == 3:
             self.model_path = "../autonomouspipeline/models/pilotnet/best_model_regNhead"
-            self.yolo_path = "../autonomouspipeline/models/yolo_model/yolo_model.onnx"
+            self.yolo_path = "../autonomouspipeline/models/yolo_model/yolo_v1_best.pt"
         elif self.approach == 4:
             self.model_path = "../autonomouspipeline/models/pilotnet/segRegNHeadsTemporal"
-            self.yolo_path = "../autonomouspipeline/models/yolo_model/yolo_model.onnx"
+            self.yolo_path = "../autonomouspipeline/models/yolo_model/yolo_v1_best.pt"
         elif self.approach == 5:
             self.model_path = "../autonomouspipeline/models/pilotnet/best_model_regNheadv2"
-            self.yolo_path = "../autonomouspipeline/models/yolo_model/yolo_model.onnx"
+            self.yolo_path = "../autonomouspipeline/models/yolo_model/yolo_model.pt"
         elif self.approach == 6:
             self.model_path = "../autonomouspipeline/models/pilotnet/best_model_approach6"
-            self.yolo_path = "../autonomouspipeline/models/yolo_model/yolo_model.onnx"
+            self.yolo_path = "../autonomouspipeline/models/yolo_model/yolo_v1_best.pt"
         elif self.approach == 7:
             self.model_path = "../autonomouspipeline/models/pilotnet/best_model_approach7"
-            self.yolo_path = "../autonomouspipeline/models/yolo_model/yolo_model.onnx"
+            self.yolo_path = "../autonomouspipeline/models/yolo_model/yolo_model.pt"
 
         self.transform = get_eval_transforms()
         self.frame_buffer = []
@@ -508,9 +512,9 @@ class AutonomousDriverUI(QMainWindow):
                     # Local Inference
                     with torch.no_grad():
                         if self.approach in [5, 6, 7]:
-                            yolo_results = self.yolo_session(cropped_img, verbose=False)
+                            yolo_results = self.yolo_session(cropped_img, verbose=False, device=self.device.type)
                         else:
-                            yolo_results = self.yolo_session(pil_image, verbose=False)
+                            yolo_results = self.yolo_session(pil_image, verbose=False, device=self.device.type)
 
                     mask = yolo_results[0].semantic_mask.data.cpu()
                     mask_pil = Image.fromarray(mask.numpy())

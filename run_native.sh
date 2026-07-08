@@ -24,4 +24,4 @@ conda activate ros_native
 source ~/dev/native_ws/devel/setup.bash
 
 # Run the node natively
-rosrun cond_imitation_learning_pkg autonomous_node.py --approach 5 --output_mode wheels
+rosrun cond_imitation_learning_pkg autonomous_node.py --approach 7

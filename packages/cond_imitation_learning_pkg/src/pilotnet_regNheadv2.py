@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+from utils import SafePool
 
 
 class ConditionalPilotNet(nn.Module):
@@ -17,7 +18,7 @@ class ConditionalPilotNet(nn.Module):
        )
 
 
-       self.pool = nn.AdaptiveAvgPool2d((5, 10))
+       self.pool = SafePool((5, 10))
        # Adjusted flattened_size based on expected output after pooling
        self.flattened_size = 64 * 5 * 10 # 3200
 
