@@ -19,7 +19,7 @@ echo "======================================================="
 
 # Re-build catkin workspace so rosrun can find newly synced scripts
 source /opt/ros/noetic/setup.sh
-catkin build --workspace /code/catkin_ws/ --no-status -q 2>&1 | tail -5
+catkin build --workspace /code/catkin_ws/ --no-status 2>&1 | tail -3
 source /code/catkin_ws/devel/setup.bash
 
 # Verify models are present

@@ -11,31 +11,24 @@ import torch
 import torchvision.transforms.functional as TF
 from PIL import Image
 
-try:
-    from ultralytics import YOLO
-except ImportError:
-    pass
-
 from duckietown_msgs.msg import Twist2DStamped, WheelsCmdStamped
 from sensor_msgs.msg import CompressedImage
 from std_msgs.msg import String
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from utils import crop_image, get_eval_transforms, INTENT_MAP
-
-try:
-    import tensorrt as trt
-    import pycuda.driver as cuda
-    import pycuda.autoinit
-    TRT_AVAILABLE = True
-except ImportError:
-    TRT_AVAILABLE = False
+from utils import crop_image, INTENT_MAP
 
 try:
     import onnxruntime as ort
     ORT_AVAILABLE = True
 except ImportError:
     ORT_AVAILABLE = False
+
+# YOLO ONNX model spec:
+# Input:  images  [1, 3, 480, 640]  float32 (RGB, normalised 0-1)
+# Output: output0 [1, 4, 480, 640]  float32 (4-class logits)
+# argmax gives semantic class map {0,1,2,3}; matches task='semantic' training
+YOLO_INPUT_H, YOLO_INPUT_W = 480, 640
 
 class HeadlessAutonomousNode:
     def __init__(self, approach=7, output_mode=None):
@@ -87,32 +80,31 @@ class HeadlessAutonomousNode:
 
         self.backend = rospy.get_param("~backend", "pytorch")
 
+        # ── YOLO (always ONNX on robot; bypasses ultralytics entirely) ─────────
         if not self.skip_segmentation:
-            rospy.loginfo(f"Loading YOLO from {self.yolo_path} ...")
+            rospy.loginfo(f"Loading YOLO ONNX from {self.yolo_path} ...")
             if not os.path.exists(self.yolo_path):
-                rospy.logfatal(f"YOLO model not found at {self.yolo_path}. "
-                               "Transfer models first: rsync -av models/ duckie@duckiexp.local:/data/models/")
+                rospy.logfatal(f"YOLO model not found at {self.yolo_path}. Run ./transfer_models.sh --all")
                 raise FileNotFoundError(self.yolo_path)
-            self.yolo_session = YOLO(self.yolo_path, task='segment')
+            # Use CUDA if available, otherwise CPU
+            yolo_providers = ['CUDAExecutionProvider', 'CPUExecutionProvider']
+            self.yolo_ort = ort.InferenceSession(self.yolo_path, providers=yolo_providers)
+            rospy.loginfo(f"YOLO ONNX running on: {self.yolo_ort.get_providers()}")
 
-        # LOAD PILOTNET
-        # Prefer ONNX on Jetson (CUDAExecutionProvider) for best perf.
-        # Fall back to PyTorch only if .onnx is not found.
+        # ── PilotNet ──────────────────────────────────────────────────────────
         onnx_path = f"{self.model_path}.onnx"
         pt_path   = f"{self.model_path}.pt"
 
         if self.backend.lower() in ["onnx", "tensorrt"] and os.path.exists(onnx_path):
-            providers = (
-                ['TensorrtExecutionProvider', 'CUDAExecutionProvider', 'CPUExecutionProvider']
-                if self.backend.lower() == "tensorrt"
-                else ['CUDAExecutionProvider', 'CPUExecutionProvider']
-            )
-            rospy.loginfo(f"Loading PilotNet ONNX ({self.backend.upper()}) from {onnx_path}")
-            self.ort_session = ort.InferenceSession(onnx_path, providers=providers)
+            # Use CUDA if available, otherwise CPU (Jetson onnxruntime-gpu needed for CUDA)
+            ort_providers = ['CUDAExecutionProvider', 'CPUExecutionProvider']
+            rospy.loginfo(f"Loading PilotNet ONNX from {onnx_path}")
+            self.ort_session = ort.InferenceSession(onnx_path, providers=ort_providers)
+            rospy.loginfo(f"PilotNet ONNX running on: {self.ort_session.get_providers()}")
             self.pt_model = None
         else:
             if self.backend.lower() in ["onnx", "tensorrt"]:
-                rospy.logwarn(f"ONNX model not found at {onnx_path}, falling back to PyTorch")
+                rospy.logwarn(f"ONNX not found at {onnx_path}, falling back to PyTorch")
             rospy.loginfo(f"Loading PilotNet PyTorch (Approach {self.approach}) on {self.device}")
             if self.approach == 7:
                 from pilotnet_FiLM import ConditionalPilotNetFiLM
@@ -123,7 +115,7 @@ class HeadlessAutonomousNode:
             self.pt_model.load_state_dict(torch.load(pt_path, map_location=self.device, weights_only=False))
             self.pt_model.eval()
 
-        # Pubs and Subs
+        # ── Pubs and Subs ─────────────────────────────────────────────────────
         if self.output_mode == "twist":
             self.cmd_pub = rospy.Publisher(f"/{self.veh}/car_cmd_switch_node/cmd", Twist2DStamped, queue_size=1, tcp_nodelay=True)
         else:
@@ -156,15 +148,23 @@ class HeadlessAutonomousNode:
 
             rgb_image = cv2.cvtColor(cv_image, cv2.COLOR_BGR2RGB)
             pil_image = Image.fromarray(rgb_image)
-            cropped_img = crop_image(pil_image)
+            cropped_img = crop_image(pil_image)  # PIL RGB, cropped
 
-            with torch.no_grad():
-                yolo_results = self.yolo_session(cropped_img, verbose=False, device=self.device.type)
-                mask = yolo_results[0].semantic_mask.data.cpu()
-                mask_pil = Image.fromarray(mask.numpy())
+            # ── YOLO semantic segmentation via ONNX ───────────────────────
+            # Resize to YOLO input size, normalise, CHW
+            yolo_in = cv2.resize(
+                np.array(cropped_img), (YOLO_INPUT_W, YOLO_INPUT_H)
+            ).astype(np.float32) / 255.0                        # HWC float32
+            yolo_in = yolo_in.transpose(2, 0, 1)[np.newaxis]   # [1,3,H,W]
+            logits = self.yolo_ort.run(None, {'images': yolo_in})[0]  # [1,4,H,W]
+            # argmax over class dim → uint8 class map {0,1,2,3}, shape [H,W]
+            seg_map = np.argmax(logits[0], axis=0).astype(np.uint8)
 
-            resized_mask_pil = mask_pil.resize((224, 112), Image.NEAREST)
-            img_tensor = TF.to_tensor(resized_mask_pil).unsqueeze(0).numpy()
+            # Resize to PilotNet input size [112, 224]
+            mask_resized = cv2.resize(seg_map, (224, 112), interpolation=cv2.INTER_NEAREST)
+            # Normalise exactly as TF.to_tensor does: uint8 / 255.0
+            # This matches the training pipeline (semantic_mask.data → to_tensor → /255)
+            img_tensor = (mask_resized.astype(np.float32) / 255.0)[np.newaxis, np.newaxis]  # [1,1,112,224]
             
             # Publish Telemetry Image (Low Res side-by-side)
             # We construct a 320x120 side-by-side image to send over network (extremely small payload!)
