@@ -283,11 +283,11 @@ class MacDashboardUI(QMainWindow):
 
     def update_images(self, raw_img, model_img):
         h, w, ch = raw_img.shape
-        qt_raw = QImage(raw_img.data, w, h, ch * w, QImage.Format_RGB888)
+        qt_raw = QImage(raw_img.tobytes(), w, h, ch * w, QImage.Format_RGB888)
         self.live_label.setPixmap(QPixmap.fromImage(qt_raw).scaled(self.live_label.width(), self.live_label.height(), Qt.KeepAspectRatio))
 
         h, w, ch = model_img.shape
-        qt_model = QImage(model_img.data, w, h, ch * w, QImage.Format_RGB888)
+        qt_model = QImage(model_img.tobytes(), w, h, ch * w, QImage.Format_RGB888)
         self.model_label.setPixmap(QPixmap.fromImage(qt_model).scaled(self.model_label.width(), self.model_label.height(), Qt.KeepAspectRatio))
 
     def update_state(self, out1, out2, intent, backend):
