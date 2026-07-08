@@ -42,7 +42,7 @@ class HeadlessAutonomousNode:
             self.output_mode = output_mode
 
         self.skip_segmentation = (self.approach == 0)
-        self.current_intent = "straight"
+        self.current_intent = "stop"
         
         self.tuning = {"v_fwd": 0.30, "v_rev": -0.5, "v_bump_a": 0.1, "omega_a": 3.0, "v_bump_d": 0.1, "omega_d": 5.0}
 
