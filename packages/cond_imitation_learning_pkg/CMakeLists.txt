@@ -12,5 +12,8 @@ catkin_package()
 
 catkin_install_python(PROGRAMS
   src/autonomous_node.py
+  src/headless_autonomous_node.py
+  src/mac_dashboard_node.py
+  src/vlm_autonomous_node.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
