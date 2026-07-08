@@ -1,4 +1,7 @@
-import torchvision.transforms as transforms
+try:
+    import torchvision.transforms as transforms
+except ImportError:
+    transforms = None
 
 # Preprocessing Constants
 CROP_TOP_ROWS = 175
@@ -30,12 +33,16 @@ def get_eval_transforms():
         transforms.ToTensor(),
     ])
 
-import torch.nn as nn
-class SafePool(nn.Module):
-    def __init__(self, size):
-        super().__init__()
-        self.pool = nn.AdaptiveAvgPool2d(size)
-    def forward(self, x):
-        if x.device.type == 'mps':
-            return self.pool(x.cpu()).to(x.device)
-        return self.pool(x)
+try:
+    import torch.nn as nn
+
+    class SafePool(nn.Module):
+        def __init__(self, size):
+            super().__init__()
+            self.pool = nn.AdaptiveAvgPool2d(size)
+        def forward(self, x):
+            if x.device.type == 'mps':
+                return self.pool(x.cpu()).to(x.device)
+            return self.pool(x)
+except ImportError:
+    pass

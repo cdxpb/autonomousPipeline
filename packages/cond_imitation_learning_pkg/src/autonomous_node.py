@@ -529,7 +529,8 @@ class AutonomousDriverUI(QMainWindow):
                 else:
                     img_tensor = TF.to_tensor(resized_mask_pil).unsqueeze(0).numpy()
                     
-                ui_model_view = (np.array(resized_mask_pil) * 85).astype(np.uint8)
+                mask_gray = (np.array(resized_mask_pil) * 85).astype(np.uint8)
+                ui_model_view = cv2.cvtColor(cv2.applyColorMap(mask_gray, cv2.COLORMAP_JET), cv2.COLOR_BGR2RGB)
 
             if self.approach == 4:
                 if len(self.frame_buffer) == 0:
