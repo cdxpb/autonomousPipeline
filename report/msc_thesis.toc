@@ -3,13 +3,14 @@
 \contentsline {section}{\numberline {2.1}Data Collection}{6}{}%
 \contentsline {section}{\numberline {2.2}YOLO segmentation model}{6}{}%
 \contentsline {section}{\numberline {2.3}Conditional Imitation Learning}{6}{}%
-\contentsline {subsection}{\numberline {2.3.1}Multible head architecture}{6}{}%
-\contentsline {subsection}{\numberline {2.3.2}FiLM}{6}{}%
-\contentsline {subsection}{\numberline {2.3.3}Other approaches}{6}{}%
-\contentsline {section}{\numberline {2.4}Inference Optimization}{6}{}%
-\contentsline {chapter}{\numberline {3}Experiments and Ablations}{7}{}%
-\contentsline {section}{\numberline {3.1}Results}{7}{}%
-\contentsline {chapter}{\numberline {4}Conclusion and Future Work}{9}{}%
-\contentsline {chapter}{\numberline {A}Pictures of Task Definitions?}{10}{}%
-\contentsline {chapter}{\numberline {B}Contributions}{11}{}%
+\contentsline {subsection}{\numberline {2.3.1}Multible head architecture (MH)}{6}{}%
+\contentsline {subsection}{\numberline {2.3.2}FiLM}{7}{}%
+\contentsline {subsection}{\numberline {2.3.3}Other approaches}{7}{}%
+\contentsline {section}{\numberline {2.4}Inference Optimization}{7}{}%
+\contentsline {chapter}{\numberline {3}Experiments and Ablations}{8}{}%
+\contentsline {section}{\numberline {3.1}Results}{8}{}%
+\contentsline {chapter}{\numberline {4}Conclusion and Future Work}{10}{}%
+\contentsline {chapter}{\numberline {A}Pictures of Task Definitions?}{11}{}%
+\contentsline {chapter}{\numberline {B}Network architures}{12}{}%
+\contentsline {chapter}{\numberline {C}Contributions}{13}{}%
 \providecommand \tocbasic@end@toc@file {}\tocbasic@end@toc@file 

@@ -38,20 +38,29 @@ We try to adress these challenges via... (transition to next chapter)
 
 \chapter{Method}
 \section{Data Collection}
-... 
+Notation use: frame = $f_t$, segmentation maks = $s_t$, wheel velocities = $v_t = [v_t^l, v_t^r]^T$. 
 
-\section{YOLO segmentation model}
+\section{YOLO segmentation model}\label{sec:yolo}
 To solve the problem with lane detection, we trained a small YOLO model to get robust lane detections.... 
 
 \section{Conditional Imitation Learning}
-Since PID control is not working (because of bad wheel odometry) we try to solve this with Conditional Imitation learning (CIL)... \\
-Describe all architectures with input and ouput.  
+As described earlier, our wheel odometry provides very inaccurate data, making PID control not relyable. Also PID controllers require extensive hyperparameter tuning. 
+To overcome these issues, we try to control our bot using a neural network, that is trained via conditional imitation learning. 
+Similar to the LX (which?), we provide the \textit{segmentation masks} $s_t$, that are computed by our trained YOLO model from section \ref{sec:yolo}. 
+In addition to that, we \textit{condition} our model on \textit{high-level commands} or \textit{intents} $c_t$ to avoid ambiguous situations like intersections. 
+In our case we chose four intents $c_t \in \{\text{'lane following'}, \text{ 'left'}, \text{ 'right'}, \text{ 'straight'},\}$, where 'left', 'right', and 'straight' are used at intersections and 'lane following' else.  
+In the following sections, we present our best working architectures, that were able to control our Duckiebot. 
 
-\subsection{Multible head architecture}
-??
+\subsection{Multible head architecture (MH)}
+\textbf{Architecture.} As vizualized in fig. \ref{fig:multibleHeads}, we first pass the current frame $f_t$ to a CNN backbone to produce visual features. 
+Based on the current intent, we then pass these features to a specialized head, which then predicts the target wheel velocities $MH_{\theta}(s_t, c_t) \approx v_t$. \\
+\textbf{Training.} We train the CNN and the four heads end-to-end using a 80/20 train/test split (check that...) and minimize a simple MSE-loss $\mathcal{L}(\theta) = \sum_{(s_t, c_t, v_t)}\| MH_{\theta}(s_t, c_t) - v_t\|_2^2$ using Adam (check). 
+Since the intents are not equally distributed in the dataset (say how), we oversample the 'left', 'right', and 'straight' intents to get 40 \% of lane following and 20 \% of the other intents during training. 
+We observed that this detail is essential for a successful training. In the end, we use the model with the lowest validation loss.  
 
 \subsection{FiLM}
-??
+\textbf{Architecture.} \\
+\textbf{Training.}
 
 \subsection{Other approaches}
 We tried naive approach classification with multible heads and without... 
@@ -87,10 +96,10 @@ describe taks 1 and see fig. \ref{fig:task1}.
 \midrule
 
 \multicolumn{3}{l}{\textit{Lane following}} \\
-Semicircle right & 5 & ? \\
-Semicircle left  & 5 & ? \\
-RU right         & ? & ? \\
-RU left          & ? & ? \\
+Semicircle right (fig. \ref{fig:task1pp}) & 5 & ? \\
+Semicircle left (fig. \ref{fig:task1pp}) & 5 & ? \\
+RU right   (fig. \ref{fig:task2}) & ? & ? \\
+RU left    (fig. \ref{fig:task2}) & ? & ? \\
 \addlinespace
 
 \multicolumn{3}{l}{\textit{Straight at intersection}} \\
@@ -133,6 +142,7 @@ Task 4 & ? & ? \\
 \begin{figure}[h]
     \centering
 
+    % Erste Zeile
     \begin{subfigure}{0.45\textwidth}
         \centering
         \includegraphics[width=0.8\linewidth, angle=90]{task1.png}
@@ -143,12 +153,45 @@ Task 4 & ? & ? \\
     \begin{subfigure}{0.45\textwidth}
         \centering
         \includegraphics[width=0.8\linewidth, angle=90]{arrows.png}
-        \caption{dummy}
+        \caption{Task 1 with arrows}
+        \label{fig:task1arrows}
+    \end{subfigure}
+
+    \vspace{0.5cm}
+
+    % Zweite Zeile
+    \begin{subfigure}{0.45\textwidth}
+        \centering
+        \includegraphics[width=0.8\linewidth]{taks1.jpeg}
+        \caption{Task 1}
+        \label{fig:task1pp}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}{0.45\textwidth}
+        \centering
+        \includegraphics[width=0.8\linewidth, angle=90]{task2.jpeg}
+        \caption{Task 2}
         \label{fig:task2}
     \end{subfigure}
 
     \caption{Tasks from Experiment section.}
     \label{fig:tasks}
+\end{figure}
+
+\chapter{Network architures}
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.8\linewidth]{pilotnet_4_heads/pilotnet_gated.png}
+    \caption{Architecture with multible heads}
+    \label{fig:multibleHeads}
+\end{figure}
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.8\linewidth]{pilotnet_film/pilotnet_film.png}
+    \caption{FiLM architecture}
+    \label{fig:FiLM}
 \end{figure}
 
 \chapter{Contributions}
