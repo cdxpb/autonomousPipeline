@@ -167,7 +167,7 @@ class HeadlessAutonomousNode:
             # Publish Telemetry Image (Low Res side-by-side)
             # We construct a 320x120 side-by-side image to send over network (extremely small payload!)
             raw_preview = cv2.resize(cv_image, (160, 120))
-            mask_preview_gray = np.array(resized_mask_pil) * 85
+            mask_preview_gray = mask_resized * 85
             mask_preview_color = cv2.applyColorMap(mask_preview_gray.astype(np.uint8), cv2.COLORMAP_JET)
             mask_preview_color = cv2.resize(mask_preview_color, (160, 120))
             telemetry_combo = np.hstack((raw_preview, mask_preview_color))
