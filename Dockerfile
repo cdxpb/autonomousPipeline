@@ -5,6 +5,9 @@ ARG MAINTAINER="Pankaj Bora borapankaj901@gmail.com"
 # pick an icon from: https://fontawesome.com/v4.7.0/icons/
 ARG ICON="cube"
 
+# Rescue NVIDIA and CUDA libraries from the official L4T container since Duckietown OS strips them
+FROM nvcr.io/nvidia/l4t-ml:r32.7.1-py3 AS cuda-rescue
+
 # ==================================================>
 # ==> Do not change the code below this line
 ARG ARCH
@@ -52,16 +55,30 @@ ENV DT_MODULE_TYPE="${REPO_NAME}" \
 
 # install apt dependencies
 COPY ./dependencies-apt.txt "${REPO_PATH}/"
-RUN curl -s https://raw.githubusercontent.com/ros/rosdistro/master/ros.asc | apt-key add -
+RUN apt-get update && apt-get install -y curl gnupg2 && curl -s https://raw.githubusercontent.com/ros/rosdistro/master/ros.asc | apt-key add -
 RUN dt-apt-install ${REPO_PATH}/dependencies-apt.txt
+
+# Rescue stripped CUDA/TensorRT/Driver libraries from the official NVIDIA container
+RUN mkdir -p /opt/nvidia-rescue/tegra
+COPY --from=cuda-rescue /usr/local/cuda-10.2 /opt/nvidia-rescue/cuda-10.2
+COPY --from=cuda-rescue /usr/lib/aarch64-linux-gnu/libcudnn* /opt/nvidia-rescue/
+COPY --from=cuda-rescue /usr/lib/aarch64-linux-gnu/libcublas* /opt/nvidia-rescue/
+COPY --from=cuda-rescue /usr/lib/aarch64-linux-gnu/libnvinfer* /opt/nvidia-rescue/
+COPY --from=cuda-rescue /usr/lib/aarch64-linux-gnu/libnvparsers* /opt/nvidia-rescue/
+COPY --from=cuda-rescue /usr/lib/aarch64-linux-gnu/libnvonnxparser* /opt/nvidia-rescue/
+COPY --from=cuda-rescue /usr/lib/aarch64-linux-gnu/libmyelin* /opt/nvidia-rescue/
+COPY --from=cuda-rescue /usr/lib/aarch64-linux-gnu/libnvblas* /opt/nvidia-rescue/
+COPY --from=cuda-rescue /usr/lib/aarch64-linux-gnu/libcuda* /opt/nvidia-rescue/
+COPY --from=cuda-rescue /usr/lib/aarch64-linux-gnu/tegra/* /opt/nvidia-rescue/tegra/
 
 # install python3 dependencies
 ARG PIP_INDEX_URL="https://pypi.org/simple"
-ENV PIP_INDEX_URL=${PIP_INDEX_URL}
+ENV PIP_INDEX_URL=${PIP_INDEX_URL} \
+    LD_LIBRARY_PATH=/opt/nvidia-rescue:/opt/nvidia-rescue/tegra:/opt/nvidia-rescue/cuda-10.2/lib64:${LD_LIBRARY_PATH}
 
 # install python dependencies
 COPY ./dependencies-py3.* "${REPO_PATH}/"
-RUN dt-pip3-install "${REPO_PATH}/dependencies-py3.*"
+RUN pip3 install -r "${REPO_PATH}/dependencies-py3.txt"
 
 # Install ultralytics safely WITHOUT dependencies to avoid overwriting GPU torch wheels
 RUN pip3 install --no-deps ultralytics
