@@ -38,16 +38,17 @@ We try to adress these challenges via... (transition to next chapter)
 
 \chapter{Method}
 To overcome the described issues, we try to control our bot using neural networks. 
-To solve ambiguous situations like intersections, \textit{condition} our model on \textit{high-level commands} or \textit{intents} $c_t$. 
+We solve ambiguous situations like intersections by \textit{conditioning} our model on \textit{high-level commands} or \textit{intents} $c_t$. 
 In the following, we describe how we collected the needed data, which network architectures we use, how we trained them, and how we improved the inference. 
 
 \section{Data Collection}\label{sec:datacollection}
 To collect data, we implemented a custom data collection node (\textcolor{red}{picture of UI}). 
 We controlled the duckiebot via the keys 'w', 'a', 's', 'd' where 'w' = straight and 's' = backwards. 
-Pressing 'a' and 'd' in addition to 'w' causes respectively the left or the right wheel to spin faster by a factor of $\omega_a$ or $\omega_d$ to handle left and right turns. (@Pankaj correct wording if this is wrong...)
+Pressing 'a' and 'd' in addition to 'w' causes respectively the left or the right wheel to spin faster by a factor of $\omega_a$ or $\omega_d$ to handle left and right turns. (\textcolor{red}{@Pankaj correct wording if this is wrong...})
 These factors $\omega_a$ or $\omega_d$ and the overall velocity are hyperparameters that should be tuned using the data collection UI (figure...). 
 The current intent is set using the keys 'i' = straight at intersections, 'j' = left at intersections, 'l' = right at intersections and 'k' = lane following when at no intersection. 
-During collection, we save the current frame $f_t$, the current wheel velocities for each wheel $v_t = [v_t^l, v_t^r]^T$, the intent $c_t$ and the current pressed steering keys. 
+During collection, we save the current frame $f_t$, the current wheel velocities for each wheel $v_t = [v_t^l, v_t^r]^T$, the intent $c_t$ and the current pressed steering keys ('w', 'a', 's', 'd'). 
+In total, we collected 10809 datapoints in about 20 min of continous driving. 
 
 \section{YOLO segmentation model}\label{sec:yolo}
 Because we don't have street lights or pedestrains in the Duckietown, the street lanes are the only needed information for steering. 
@@ -62,7 +63,7 @@ We also crop the image, such that only the bottom is visible. (see fig \ref{fig:
 \end{figure}
 
 \section{Conditional Imitation Learning}
-We tried multible ways to condition a neural network on high-level commands. in the following we describe the two most promising approaches. 
+We tried multible ways to condition a neural network on high-level commands. In the following we describe the two most promising approaches. 
 
 \subsection{Multible head architecture (MH)}\label{sec:MH}
 \textbf{Architecture.} As vizualized in fig. \ref{fig:multibleHeads}, we first pass the current frame $f_t$ to a CNN backbone to produce visual features. 
@@ -82,10 +83,10 @@ In this section, we'd like to briefly describe some other architectures that we 
 The intent was fed into the linear layer as a one-hot encoded four dimensional vector. 
 We observed, that the model drove forward, but was barely able to react on changes to the lane. This approach likely failed, because the model used the whole image as an input and therefore recieved too much uneccecary information. 
 We also assume, that the conditioning method was too weak to have an influence. \\
-\textbf{Classification.} Because we used discrete control signals (describe that in data collection..) during data collection, we also tried if the model can accurately classify when to do which action.
+\textbf{Classification.} Because we used discrete control signals (as described in section \ref{sec:datacollection}) during data collection, we also tried if the model can accurately classify when to do which action.
 The model therefore had 3 output neurons, referring to the three actions: 'w' = straight, 'w' + 'a' = left turn, 'w' + 'd' right turn. 
 We tried this in combination with the multible head architecture from section \ref{sec:MH}. 
-We observed, that the model is able to control the Duckiebot, but also shows a highly non-smooth and zigzagy driving style. 
+We observed, that the model is able to control the Duckiebot, but also shows a highly non-smooth and zigzagy driving style. (\textcolor{red}{link to a video?})
 We therefore decided not to pursue this approach any further.
 
 
