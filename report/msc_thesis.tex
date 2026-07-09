@@ -30,18 +30,29 @@ Test
     \item describe the problems that we had: 
     \begin{enumerate}
         \item massive drift of the bot when driving straight (when both motors tick with the same frequency, the bot is not driving straight)
-        \item odometry is not precise (as a consequence of a)) $\to$ PID control is almost impossible
+        \item odometry is not precise (as a consequence of a)) $\to$ PID control is almost impossible (+hyperparametertuning...)
         \item lane detection via HSV values (from computer vision LX) is bad and not robust 
     \end{enumerate}
 \end{enumerate}
 We try to adress these challenges via... (transition to next chapter)
 
 \chapter{Method}
-\section{Data Collection}
-Notation use: frame = $f_t$, segmentation maks = $s_t$, wheel velocities = $v_t = [v_t^l, v_t^r]^T$. 
+To overcome the described issues, we try to control our bot using neural networks. 
+To solve ambiguous situations like intersections, \textit{condition} our model on \textit{high-level commands} or \textit{intents} $c_t$. 
+In the following, we describe how we collected the needed data, which network architectures we use, how we trained them, and how we improved the inference. 
+
+\section{Data Collection}\label{sec:datacollection}
+To collect data, we implemented a custom data collection node (\textcolor{red}{picture of UI}). 
+We controlled the duckiebot via the keys 'w', 'a', 's', 'd' where 'w' = straight and 's' = backwards. 
+Pressing 'a' and 'd' in addition to 'w' causes respectively the left or the right wheel to spin faster by a factor of $\omega_a$ or $\omega_d$ to handle left and right turns. (@Pankaj correct wording if this is wrong...)
+These factors $\omega_a$ or $\omega_d$ and the overall velocity are hyperparameters that should be tuned using the data collection UI (figure...). 
+The current intent is set using the keys 'i' = straight at intersections, 'j' = left at intersections, 'l' = right at intersections and 'k' = lane following when at no intersection. 
+During collection, we save the current frame $f_t$, the current wheel velocities for each wheel $v_t = [v_t^l, v_t^r]^T$, the intent $c_t$ and the current pressed steering keys. 
 
 \section{YOLO segmentation model}\label{sec:yolo}
-To solve the problem with lane detection, we trained a small YOLO model to get robust lane detections.... Also write here about cropping and use fig. \ref{fig:sem_example}:
+Because we don't have street lights or pedestrains in the Duckietown, the street lanes are the only needed information for steering. 
+Due to the described problems with the lane detection LX, we train a small YOLO model to segment the lanes in the given frame. 
+We also crop the image, such that only the bottom is visible. (see fig \ref{fig:sem_example}:)
 
 \begin{figure}[h]
     \center
@@ -51,13 +62,7 @@ To solve the problem with lane detection, we trained a small YOLO model to get r
 \end{figure}
 
 \section{Conditional Imitation Learning}
-As described earlier, our Duckiebot shows massive drift. As a result, our wheel odometry provides very inaccurate data, making PID control not relyable. 
-Also PID controllers require extensive hyperparameter tuning. 
-To overcome these issues, we try to control our bot using a neural network, that is trained via conditional imitation learning. 
-Similar to the LX (which?), we provide the \textit{segmentation masks} $s_t$, that are computed by our trained YOLO model from section \ref{sec:yolo}. 
-In addition to that, we \textit{condition} our model on \textit{high-level commands} or \textit{intents} $c_t$ to solve ambiguous situations like intersections. 
-In our case we chose four intents $c_t \in \{\text{'lane following'}, \text{ 'left'}, \text{ 'right'}, \text{ 'straight'},\}$, where 'left', 'right', and 'straight' are used at intersections and 'lane following' else.  
-In the following sections, we present our best working architectures, that were able to control our Duckiebot. 
+We tried multible ways to condition a neural network on high-level commands. in the following we describe the two most promising approaches. 
 
 \subsection{Multible head architecture (MH)}\label{sec:MH}
 \textbf{Architecture.} As vizualized in fig. \ref{fig:multibleHeads}, we first pass the current frame $f_t$ to a CNN backbone to produce visual features. 
@@ -153,7 +158,7 @@ Task 4 & ? & ? \\
 \end{table}
 
 \chapter{Remaining Problems}
-Write here what we were not able to solve...
+Write here what we were not able to solve 
 
 % ... input content via other .tex files
 \input{content/conclusion}
