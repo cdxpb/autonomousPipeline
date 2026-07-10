@@ -66,34 +66,15 @@ class ConditionalPilotNet(nn.Module):
        features = self.pool(features)
        features = features.reshape(-1, self.flattened_size) # [batch_size, flattened_size]
 
-
-       # Determine which intent is active for each sample in the batch
-       # intent is one-hot encoded: [straight, left, right, lane_following]
-       intent_indices = torch.argmax(intent, dim=1) # E.g., [0, 1, 0, 2, 3, ...] for batch_size samples
-
-
-       # Initialize an output tensor of zeros
-       batch_size = features.shape[0]
-       output_velocities = torch.zeros(batch_size, 2, device=img.device)
-
-
-       # Create masks for each intent (assuming order: Straight=0, Left=1, Right=2, Lane_following=3)
-       is_straight = (intent_indices == 0)
-       is_left = (intent_indices == 1)
-       is_right = (intent_indices == 2)
-       is_lane_following = (intent_indices == 3)
-
-
-       # Apply the corresponding head based on intent for each sample
-       if is_straight.any():
-           output_velocities[is_straight] = self.straight_head(features[is_straight])
-       if is_left.any():
-           output_velocities[is_left] = self.left_head(features[is_left])
-       if is_right.any():
-           output_velocities[is_right] = self.right_head(features[is_right])
-       if is_lane_following.any(): # Add this block for lane_following
-           output_velocities[is_lane_following] = self.lane_following_head(features[is_lane_following])
-
-
+       # one-hot order: straight=0, left=1, right=2, lane_following=3
+       # gather by index, not boolean-mask indexing (mask indexing breaks the ONNX export)
+       intent_indices = torch.argmax(intent, dim=1)
+       stacked = torch.stack([
+           self.straight_head(features),
+           self.left_head(features),
+           self.right_head(features),
+           self.lane_following_head(features),
+       ], dim=1)  # [B, 4, 2]
+       output_velocities = stacked[torch.arange(features.shape[0], device=img.device), intent_indices]
        return output_velocities
 

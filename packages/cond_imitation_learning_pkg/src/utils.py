@@ -34,15 +34,28 @@ def get_eval_transforms():
     ])
 
 try:
+    import torch
     import torch.nn as nn
 
     class SafePool(nn.Module):
+        # matches nn.AdaptiveAvgPool2d(size) numerically but traces to plain slicing+mean,
+        # so it works around AdaptiveAvgPool2d being buggy on MPS and torch.onnx.export
+        # refusing sizes that don't divide evenly (e.g. 7x21 -> 5x10, used by PilotNet heads)
         def __init__(self, size):
             super().__init__()
-            self.pool = nn.AdaptiveAvgPool2d(size)
+            self.output_size = size
+
         def forward(self, x):
-            if x.device.type == 'mps':
-                return self.pool(x.cpu()).to(x.device)
-            return self.pool(x)
+            oh, ow = self.output_size
+            h, w = x.shape[-2:]
+            rows = []
+            for i in range(oh):
+                hs, he = (i * h) // oh, -(-((i + 1) * h) // oh)
+                cols = []
+                for j in range(ow):
+                    ws, we = (j * w) // ow, -(-((j + 1) * w) // ow)
+                    cols.append(x[..., hs:he, ws:we].mean(dim=(-2, -1), keepdim=True))
+                rows.append(torch.cat(cols, dim=-1))
+            return torch.cat(rows, dim=-2)
 except ImportError:
     pass
