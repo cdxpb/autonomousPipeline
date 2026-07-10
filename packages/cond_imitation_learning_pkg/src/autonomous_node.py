@@ -32,9 +32,7 @@ from PyQt5.QtCore import Qt, pyqtSignal, QObject
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from utils import crop_image, get_eval_transforms, INTENT_MAP, CROP_TOP_ROWS
 
-# ---------------------------------------------------------
-# BACKEND LIBRARIES
-# ---------------------------------------------------------
+# -- Backend libraries --
 try:
     import tensorrt as trt
     import pycuda.driver as cuda
@@ -153,7 +151,7 @@ class AutonomousDriverUI(QMainWindow):
         return default_config
 
     def init_ui(self):
-        self.setWindowTitle(f"Autonomous Dashboard — {self.veh}")
+        self.setWindowTitle(f"Autonomous Dashboard - {self.veh}")
         self.setGeometry(100, 100, 900, 700)
 
         main_widget = QWidget(self)
@@ -308,9 +306,7 @@ class AutonomousDriverUI(QMainWindow):
         else: # 3: stop
             return 0.0, 0.0
 
-    # ---------------------------------------------------------
-    # STATE CONTROL
-    # ---------------------------------------------------------
+    # -- State control --
     def start_autonomous(self):
         backend = self.backend_combo.currentText()
         rospy.loginfo(f"Loading Model for Backend: {backend}...")
@@ -395,9 +391,7 @@ class AutonomousDriverUI(QMainWindow):
             
         rospy.logwarn("Autonomous Mode STOPPED. Zero velocities sent.")
 
-    # ---------------------------------------------------------
-    # INTENT HANDLING
-    # ---------------------------------------------------------
+    # -- Intent handling --
     def intent_cb(self, msg):
         self.set_intent(msg.data)
 
@@ -416,9 +410,7 @@ class AutonomousDriverUI(QMainWindow):
             else:
                 btn.setStyleSheet("background-color: #f8f9fa; color: black; padding: 8px;")
 
-    # ---------------------------------------------------------
-    # MAIN ROS INFERENCE LOOP
-    # ---------------------------------------------------------
+    # -- Main ROS inference loop --
     def setup_inference_engine(self):
         if not self.skip_segmentation and not self.chk_seg_offload.isChecked():
             self._load_local_yolo()
