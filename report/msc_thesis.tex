@@ -101,62 +101,76 @@ steps that we took to make the inference fast and stable (running it wothout Doc
 % @Pankaj
 
 \chapter{Experiments and Ablations}
-define tasks and try out different models 5 times on the same task and report: 
-\begin{enumerate}
-    \item success rate 
-    \item average completation time with standart deviation  ??
-    \item report what fails ??
-\end{enumerate}
-Lets have pictures of the task definitions in the appendix. \\
-Maybe also we can link videos of different driving styles of our bots using our git repo. 
+In this section we want to test \textbf{a)} whether the MH or the FiLM architecture performs better, \textbf{b)} which inference variant is the most stable and 
+\textbf{c)} if our DAgger-like finetune technique helps to improve the succhess rate of our models. To achieve this, we define x tasks. 
+First we isolate the 4 intents on different situations. 
+We then also test on one long complex track, that requires all intents and long-term robustness.
 
 
 \section{Results}
+The exact task definitions can be observed in fig. \ref{fig:tasks}. 
+For each task, we test our model five times in each direction of travel and report how often the model succeeds. 
+The results can be viewed in table \ref{tab:results}. 
+\textbf{Bold values} are the best values among a task. \\
 
-describe taks 1 and see fig. \ref{fig:task1}.
+\textcolor{red}{Interpretation of results... (also write about the parameter size of the models somewhere?)}
 
 \begin{table}[t]
 \centering
-\caption{Success rates for the evaluated tasks on five runs each.}
+\caption{Success rates for the evaluated tasks on five runs each. \textcolor{red}{Ideally we can combine left and right rows in 1 to save space..}}
 \label{tab:results}
-\begin{tabular}{lll}
+
+\small
+\setlength{\tabcolsep}{3pt} % default is 6pt
+
+\begin{tabular}{lcccccc}
 \toprule
-\textbf{Task} & \textbf{Regression} & \textbf{FiLM} \\
+&
+\multicolumn{3}{c}{\textbf{Multiple Heads}} &
+\multicolumn{3}{c}{\textbf{FiLM}} \\
+\cmidrule(lr){2-4}\cmidrule(lr){5-7}
+\textbf{Task} &
+\textbf{Docker} &
+\textbf{Duckiebot} &
+\textbf{DAgger?} &
+\textbf{Docker} &
+\textbf{Duckiebot} &
+\textbf{DAgger?} \\
 \midrule
 
-\multicolumn{3}{l}{\textit{Lane following}} \\
-Semicircle right (fig. \ref{fig:task1pp}) & 5 & ? \\
-Semicircle left (fig. \ref{fig:task1pp}) & 5 & ? \\
-RU right   (fig. \ref{fig:task2}) & ? & ? \\
-RU left    (fig. \ref{fig:task2}) & ? & ? \\
+\multicolumn{7}{l}{\textit{Lane following}} \\
+Semicircle left (Fig.~\ref{fig:task1pp}) & ? & ? & ? & ? & ? & ? \\
+Semicircle right (Fig.~\ref{fig:task1pp}) & ? & ? & ? & ? & ? & ? \\
+long corner left (Fig.~\ref{fig:task2})   & ? & ? & ? & ? & ? & ? \\
+long corner right (Fig.~\ref{fig:task2})   & ? & ? & ? & ? & ? & ? \\
 \addlinespace
 
-\multicolumn{3}{l}{\textit{Straight at intersection}} \\
-Task 1 & ? & ? \\
-Task 2 & ? & ? \\
-Task 3 & ? & ? \\
-Task 4 & ? & ? \\
+\multicolumn{7}{l}{\textit{Straight at intersection}} \\
+Task 1 & ? & ? & ? & ? & ? & ? \\
+Task 2 & ? & ? & ? & ? & ? & ? \\
+Task 3 & ? & ? & ? & ? & ? & ? \\
+Task 4 & ? & ? & ? & ? & ? & ? \\
 \addlinespace
 
-\multicolumn{3}{l}{\textit{Left turn at intersection}} \\
-Task 1 & ? & ? \\
-Task 2 & ? & ? \\
-Task 3 & ? & ? \\
-Task 4 & ? & ? \\
+\multicolumn{7}{l}{\textit{Left turn at intersection}} \\
+Task 1 & ? & ? & ? & ? & ? & ? \\
+Task 2 & ? & ? & ? & ? & ? & ? \\
+Task 3 & ? & ? & ? & ? & ? & ? \\
+Task 4 & ? & ? & ? & ? & ? & ? \\
 \addlinespace
 
-\multicolumn{3}{l}{\textit{Right turn at intersection}} \\
-Task 1 & ? & ? \\
-Task 2 & ? & ? \\
-Task 3 & ? & ? \\
-Task 4 & ? & ? \\
+\multicolumn{7}{l}{\textit{Right turn at intersection}} \\
+Task 1 & ? & ? & ? & ? & ? & ? \\
+Task 2 & ? & ? & ? & ? & ? & ? \\
+Task 3 & ? & ? & ? & ? & ? & ? \\
+Task 4 & ? & ? & ? & ? & ? & ? \\
 \addlinespace
 
-\multicolumn{3}{l}{\textit{Long experiment}} \\
-Task 1 & ? & ? \\
-Task 2 & ? & ? \\
-Task 3 & ? & ? \\
-Task 4 & ? & ? \\
+\multicolumn{7}{l}{\textit{Long experiment}} \\
+Task 1 & ? & ? & ? & ? & ? & ? \\
+Task 2 & ? & ? & ? & ? & ? & ? \\
+Task 3 & ? & ? & ? & ? & ? & ? \\
+Task 4 & ? & ? & ? & ? & ? & ? \\
 
 \bottomrule
 \end{tabular}
@@ -166,7 +180,15 @@ Task 4 & ? & ? \\
 Write here what we were not able to solve 
 
 % ... input content via other .tex files
-\input{content/conclusion}
+\chapter{Conclusion and Future Work}
+\label{sec:conclusion}
+
+To conclude... \\
+
+Future work: With our learning based approach, we provide robust models, that can control the Duckiebot relyable. 
+However, we did not incorperate street lights and pedestrains yet. Also, a fully autonomous car should also be able to navigate through the Duckietown by itself.
+To achieve this, a high-level planner like A* or the continous version Anytime A* \textcolor{red}{(refence!!)} is needed to get the high level commands. 
+Another way to get these is \textcolor{red}{the VLM approach of @Pankaj...} We leave these challenges as future work. 
 
 \appendix
 \chapter{Pictures of Task Definitions?}
@@ -178,7 +200,7 @@ Write here what we were not able to solve
     \begin{subfigure}{0.45\textwidth}
         \centering
         \includegraphics[width=0.8\linewidth, angle=90]{task1.png}
-        \caption{Task 1}
+        \caption{Task 1 gemini stil}
         \label{fig:task1}
     \end{subfigure}
     \hfill
@@ -195,14 +217,14 @@ Write here what we were not able to solve
     \begin{subfigure}{0.45\textwidth}
         \centering
         \includegraphics[width=0.8\linewidth]{taks1.jpeg}
-        \caption{Task 1}
+        \caption{Semicircle: Drive this semicyrcle five times in each direction.}
         \label{fig:task1pp}
     \end{subfigure}
     \hfill
     \begin{subfigure}{0.45\textwidth}
         \centering
         \includegraphics[width=0.8\linewidth, angle=90]{task2.jpeg}
-        \caption{Task 2}
+        \caption{long corner: 5 times in each direction}
         \label{fig:task2}
     \end{subfigure}
 
