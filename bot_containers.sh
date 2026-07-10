@@ -1,20 +1,11 @@
 #!/bin/bash
-# ============================================================
-# bot_containers.sh – Audit and optionally stop Docker containers
-#                      running on the Duckiebot to free up RAM.
-#
-# The Jetson Nano only has 4GB RAM total; leftover/duplicate
-# containers from earlier test runs (old `dts devel run` sessions,
-# stopped-but-not-removed segmentation servers, etc.) eat into
-# that budget even when idle.
+# Audit/stop Docker containers on the Duckiebot to free up RAM.
 #
 # Usage:
-#   ./bot_containers.sh                      # list only (default, safe)
-#   ./bot_containers.sh --list               # same as above
-#   ./bot_containers.sh --stop <name-or-id>  # stop ONE container (asks to confirm)
-#   ./bot_containers.sh --stop-all-except core1,core2   # stop everything NOT in this list
-#   ./bot_containers.sh --prune              # remove stopped containers + dangling images/layers (safe, frees disk not RAM)
-# ============================================================
+#   ./bot_containers.sh                                  # list only (default)
+#   ./bot_containers.sh --stop <name-or-id>
+#   ./bot_containers.sh --stop-all-except core1,core2
+#   ./bot_containers.sh --prune                          # remove stopped containers + dangling images
 
 set -e
 
@@ -34,17 +25,15 @@ while [[ "$#" -gt 0 ]]; do
     shift
 done
 
-echo "======================================================="
-echo " Duckiebot Docker Container Audit  ($ROBOT)"
-echo "======================================================="
+echo "=== Duckiebot container audit ($ROBOT) ==="
 
 if [ "$MODE" == "list" ]; then
     echo
-    echo "--- Running containers (name / image / status / ports) ---"
+    echo "--- Running containers ---"
     ssh "$ROBOT" "docker ps --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}'"
 
     echo
-    echo "--- Live memory usage per container (no-stream snapshot) ---"
+    echo "--- Memory usage ---"
     ssh "$ROBOT" "docker stats --no-stream --format 'table {{.Name}}\t{{.MemUsage}}\t{{.CPUPerc}}'"
 
     echo
@@ -52,22 +41,16 @@ if [ "$MODE" == "list" ]; then
     ssh "$ROBOT" "free -h"
 
     echo
-    echo "Typical Duckietown CORE containers you probably want to KEEP:"
-    echo "  names containing: duckiebot-interface, ros, roscore, portainer, dt-files-api, watchtower"
-    echo
-    echo "Likely SAFE-TO-STOP candidates: leftover 'dts-run-*' dev sessions from earlier"
-    echo "'dts devel run' testing, duplicate/old autonomousPipeline containers, unused VNC/desktop sessions."
-    echo
-    echo "Review the list above yourself before stopping anything -- container names vary by setup."
-    echo "To stop one:            ./bot_containers.sh --stop <name>"
-    echo "To stop all except X,Y: ./bot_containers.sh --stop-all-except X,Y"
+    echo "Keep: duckiebot-interface, ros, roscore, portainer, dt-files-api, watchtower"
+    echo "Usually safe to stop: leftover dts-run-* sessions, old autonomousPipeline containers."
+    echo "  ./bot_containers.sh --stop <name>"
+    echo "  ./bot_containers.sh --stop-all-except X,Y"
 
 elif [ "$MODE" == "stop" ]; then
     if [ -z "$TARGET" ]; then
         echo "ERROR: --stop requires a container name or ID"; exit 1
     fi
-    echo "About to stop container: $TARGET"
-    read -p "Confirm? [y/N] " CONFIRM
+    read -p "Stop $TARGET? [y/N] " CONFIRM
     if [[ "$CONFIRM" =~ ^[Yy]$ ]]; then
         ssh "$ROBOT" "docker stop '$TARGET'"
         echo "Stopped $TARGET."
@@ -82,8 +65,7 @@ elif [ "$MODE" == "stop_all_except" ]; then
     echo "Containers currently running:"
     ssh "$ROBOT" "docker ps --format '{{.Names}}'"
     echo
-    echo "Will stop everything EXCEPT: $KEEP_LIST"
-    read -p "Confirm? [y/N] " CONFIRM
+    read -p "Stop everything EXCEPT $KEEP_LIST? [y/N] " CONFIRM
     if [[ "$CONFIRM" =~ ^[Yy]$ ]]; then
         ssh "$ROBOT" "KEEP='$KEEP_LIST'; for n in \$(docker ps --format '{{.Names}}'); do
             skip=0
@@ -98,7 +80,7 @@ elif [ "$MODE" == "stop_all_except" ]; then
     fi
 
 elif [ "$MODE" == "prune" ]; then
-    echo "This removes STOPPED containers and dangling images/build cache (frees disk, not RAM)."
+    echo "Removes STOPPED containers and dangling images/build cache (frees disk, not RAM)."
     read -p "Confirm? [y/N] " CONFIRM
     if [[ "$CONFIRM" =~ ^[Yy]$ ]]; then
         ssh "$ROBOT" "docker container prune -f && docker image prune -f && docker builder prune -f"

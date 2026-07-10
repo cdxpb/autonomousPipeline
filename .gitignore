@@ -21,3 +21,5 @@ msc_thesis.bbl
 msc_thesis.fdb_latexmk
 
 .env.local
+# local dev notes, not for the repo
+NOTES.local.md

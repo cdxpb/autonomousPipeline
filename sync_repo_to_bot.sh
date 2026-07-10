@@ -1,17 +1,11 @@
 #!/bin/bash
-# ============================================================
-# sync_repo_to_bot.sh – Sync the repo source (not models, not .git)
-# to the Duckiebot's home dir for native (no-Docker) builds.
-# Run this from your Mac. Models are transferred separately via
-# transfer_models.sh (they're large and don't change often).
-# ============================================================
+# Sync repo source (not models, not .git) to the Duckiebot for native builds.
+# Run from your Mac. Models are transferred separately via transfer_models.sh.
 
 ROBOT=duckie@duckiexp.local
 REMOTE_DIR="~/dev/autonomousPipeline"
 
-echo "======================================================="
-echo " Syncing repo source to $ROBOT:$REMOTE_DIR"
-echo "======================================================="
+echo "=== Syncing repo source to $ROBOT:$REMOTE_DIR ==="
 
 ssh "$ROBOT" "mkdir -p $REMOTE_DIR"
 

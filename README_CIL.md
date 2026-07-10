@@ -73,3 +73,38 @@ To run the pipeline natively on macOS without Docker, utilizing the Metal GPU (`
    ```bash
    bash ./run_native.sh
    ```
+
+## 5. Native Jetson Setup (on the Duckiebot itself, no Docker)
+
+Confirmed on `duckiexp`: Ubuntu 18.04.6 (Bionic), Python 3.6.9, aarch64, `nvidia-l4t-core 32.7.6`,
+4GB RAM. Runtime backend is TensorRT + PyCUDA, not raw PyTorch (torch's CUDA kernel loading
+alone can spike RAM/swap by ~1.8GB on a 4GB Nano).
+
+1. From your Mac, sync source + models to the robot:
+   ```bash
+   ./sync_repo_to_bot.sh
+   ./transfer_models.sh --all
+   ```
+2. SSH into the robot and run each setup stage, reviewing output between stages:
+   ```bash
+   ssh duckie@duckiexp.local
+   cd ~/dev/autonomousPipeline
+   bash setup_native_jetson.sh preflight        # read-only: checks CUDA/TensorRT/ROS state
+   bash setup_native_jetson.sh install-ros       # apt install ros-melodic-ros-base
+   bash setup_native_jetson.sh install-pycuda    # pycuda + verify tensorrt python bindings
+   bash setup_native_jetson.sh build-workspace   # catkin workspace, symlinks cond_imitation_learning_pkg
+   ```
+3. Build TensorRT engines from the existing ONNX models (still on the robot):
+   ```bash
+   python3 packages/cond_imitation_learning_pkg/src/export_trt.py --all
+   ```
+4. Run natively:
+   ```bash
+   bash run_robot_native.sh --approach 7
+   ```
+
+`preflight` checks whether the Docker container running `roscore` is on `NetworkMode=host` --
+required for the native process to reach the ROS master on `localhost`.
+
+If RAM is tight, `./bot_containers.sh` lists running containers with live memory usage so you can
+stop ones you don't need. 
