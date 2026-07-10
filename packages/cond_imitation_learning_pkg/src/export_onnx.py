@@ -1,13 +1,8 @@
 #!/usr/bin/env python3
 """
-export_onnx.py
---------------
 Exports PilotNet Approach 5 (regNheadv2) and Approach 7 (FiLM) to ONNX.
-
-The key challenge: both models use AdaptiveAvgPool2d with non-divisible sizes
-(7x21 -> 4x7 or 5x10) which is unsupported by the ONNX tracer.
-We replace SafePool with equivalent static AvgPool2d kernels computed from the
-actual feature map shapes before exporting.
+Replaces SafePool with equivalent static AvgPool2d kernels before exporting, the ONNX
+tracer chokes on AdaptiveAvgPool2d's non-divisible output sizes here.
 
 Run this on your Mac (in ros_native env) before deploying to the Duckiebot:
     conda activate ros_native
