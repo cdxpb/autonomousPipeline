@@ -1,0 +1,15 @@
+\chapter{Introduction}
+\label{chapter:introduction}
+
+
+\textcolor{red}{The following is my summary—we should go over this together.} \\
+Duckietown is an educational and research platform that enables the exploration of autonomous driving concepts using a simple and low-cost environment. 
+It also provides Learning Experiences (LX) in which we learned about basic concepts of self-driving cars. 
+However, a number of problems arose during the LX that made it difficult or even impossible to control the Duckiebot reliably: \\
+Most importantly, our Duckiebot shows \textbf{strong drift}, likely due to hardware issues. 
+Because the provided odometry algorithms rely on correct wheel information, we were not able to control our Duckiebot with a PID controller. \\
+Also, in the Computer Vision LX, we were supposed to do find lower- and upper-bounds of HSV values by hand to correctly segment lanes in pictures that are taken by the camera of the bot. 
+However, we were not able to find good values, that are \textbf{robust under every lighting condtion}. 
+As a consequence, the lane following module was not robust. \\
+We tried to adress these challenges via \textbf{conditional imitation learning} and making use of a small \textbf{segmentation model}. 
+We find that this pipeline enables relyable control of our bot. 

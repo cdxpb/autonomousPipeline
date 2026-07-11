@@ -1,0 +1,15 @@
+\section{YOLO segmentation model}
+\label{sec:yolo}
+
+Because we don't have street lights or pedestrains in the Duckietown, the street lanes are the only needed information for steering. 
+Due to the described problems with the lane detection LX, we train a small YOLO model to segment the lanes in the given frame. 
+We also crop the image, such that only the bottom is visible. (see fig \ref{fig:sem_example}:) \\
+\textbf{Architecture.} \\
+\textbf{Training.}
+
+\begin{figure}[h]
+    \center
+    \includegraphics[width=\linewidth]{semantic_mask.png}
+    \caption{Example output of our trained YOLO segmentation model.}
+    \label{fig:sem_example}
+\end{figure}

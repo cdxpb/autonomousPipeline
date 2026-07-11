@@ -4,251 +4,33 @@
 \title{Conditional Imitation Learning with Duckietown}
 \author{DuckieExpress}
 
-% DuckieExpress: \\
-% Pankaj Bora \thanks{e-mail: my.name@uni-tuebingen.de} \\
-% Elia Reppchen \thanks{e-mail: my.name@uni-tuebingen.de} \\
-% Eric Berger \thanks{e-mail: my.name@uni-tuebingen.de} \\
-% Felix Schlechte \thanks{e-mail: felix.schlechte@student.uni-tuebingen.de} \\}
 \date{\today}
 \begin{document}
 
 \input{teaser}
 
-\chapter*{Abstract}
-Test
+\input{chapters/abstract}
 
 \tableofcontents
 
-%% braucht kein Mensch ...
-%\listoffigures
-%\listoftables
+\input{chapters/introduction}
 
-% write content here or...
-\chapter{Introduction}
+\input{chapters/method}
+ 
+\input{chapters/experiments}
 
-\textcolor{red}{The following is my summary—we should go over this together.} \\
-Duckietown is an educational and research platform that enables the exploration of autonomous driving concepts using a simple and low-cost environment. 
-It also provides Learning Experiences (LX) in which we learned about basic concepts of self-driving cars. 
-However, a number of problems arose during the LX that made it difficult or even impossible to control the Duckiebot reliably: \\
-Most importantly, our Duckiebot shows \textbf{strong drift}, likely due to hardware issues. 
-Because the provided odometry algorithms rely on correct wheel information, we were not able to control our Duckiebot with a PID controller. \\
-Also, in the Computer Vision LX, we were supposed to do find lower- and upper-bounds of HSV values by hand to correctly segment lanes in pictures that are taken by the camera of the bot. 
-However, we were not able to find good values, that are \textbf{robust under every lighting condtion}. 
-As a consequence, the lane following module was not robust. \\
-We tried to adress these challenges via \textbf{conditional imitation learning} and making use of a small \textbf{segmentation model}. 
-We find that this pipeline enables relyable control of our bot. 
+\input{chapters/remaining}
 
-\chapter{Method}
-To overcome the described issues, we try to control our bot using neural networks. 
-We solve ambiguous situations like intersections by \textit{conditioning} our model on \textit{high-level commands} or \textit{intents} $c_t$. 
-In the following, we describe how we collected the needed data, which network architectures we used, how we trained them, and how we improved the inference. 
+\input{chapters/conclusion}
 
-\section{Data Collection}\label{sec:datacollection}
-To collect data, we implemented a custom data collection node (\textcolor{red}{picture of UI}). 
-We controlled the duckiebot via the keys 'w', 'a', 's', 'd' where 'w' = straight and 's' = backwards. 
-Pressing 'a' and 'd' in addition to 'w' causes respectively the left or the right wheel to spin faster by a factor of $\omega_a$ or $\omega_d$ to handle left and right turns. (\textcolor{red}{@Pankaj: correct the wording if this is wrong...})
-These factors $\omega_a$ or $\omega_d$ and the overall velocity are hyperparameters that should be tuned using the data collection UI (figure...). In practise, we don't use backwards motion. 
-The current intent is set using the keys 'i' = straight at intersections, 'j' = left at intersections, 'l' = right at intersections and 'k' = lane following when not at intersection. 
-During collection, we save the current frame $f_t$, the current wheel velocities for each wheel $v_t = [v_t^l, v_t^r]^T$, the intent $c_t$ and the current pressed steering keys ('w', 'a', 's', 'd'). 
-In total, we collected 10809 datapoints in about 20 min of continous driving. 
-
-\section{YOLO segmentation model}\label{sec:yolo}
-Because we don't have street lights or pedestrains in the Duckietown, the street lanes are the only needed information for steering. 
-Due to the described problems with the lane detection LX, we train a small YOLO model to segment the lanes in the given frame. 
-We also crop the image, such that only the bottom is visible. (see fig \ref{fig:sem_example}:) \\
-\textbf{Architecture.} \\
-\textbf{Training.}
-
-\begin{figure}[h]
-    \center
-    \includegraphics[width=\linewidth]{semantic_mask.png}
-    \caption{Example output of our trained YOLO segmentation model.}
-    \label{fig:sem_example}
-\end{figure}
-
-\section{Conditional Imitation Learning}
-We tried multible ways to condition a neural network on high-level commands. In the following, we describe the two most successful approaches. 
-
-\subsection{Multible head architecture (MH)}\label{sec:MH}
-\textbf{Architecture.} As vizualized in fig. \ref{fig:multibleHeads}, we first pass the current frame $f_t$ to a CNN backbone to produce visual features. 
-Based on the current intent, we then pass these features to a specialized head, which then predicts the target wheel velocities $MH_{\theta}(s_t, c_t) \approx v_t$. \\
-\textbf{Training.} We train the CNN and the four heads end-to-end using a 80/20 train/test split and minimize a simple MSE-loss $\mathcal{L}(\theta) = \frac{1}{\vert \mathcal{B} \vert}\sum_{(s_t, c_t, v_t) \in \mathcal{B}} (MH_{\theta}(s_t, c_t) - v_t)^2$, where $\mathcal{B}$ is a batch with batchsize $\vert \mathcal{B}\vert = 64$. 
-We use Adam as an optimizer. 
-Since the intents are not equally distributed in the dataset ('lane following' $\approx 73 \%$, 'left' $\approx 11 \%$, 'straight' $\approx 10 \%$, 'right' $\approx 6 \%$), we oversample the 'left', 'right', and 'straight' intents to get 40 \% of lane following and 20 \% of the other intents during training. 
-We observed that this detail is crucial to get a successful model. In the end, we use the model with the lowest validation loss.  
-
-\subsection{FiLM}
-\textbf{Architecture.} \\
-\textbf{Training.} \textcolor{red}{I think the trainig is the same as for the MH architecture, ten we can condence into one...}
-
-\subsection{Other approaches}
-In this section, we'd like to briefly describe some other architectures that we tried but that either failed or did not produce the desired results. \\
-\textbf{Naive approach.} First we tried to pass the current RGB frame $f_t$ directly a neural network (CNN with fully-connected layers afterwards). 
-The intent was fed into the linear layer as a one-hot encoded four dimensional vector. 
-We observed, that the model drove forward, but was barely able to react on changes to the lane. This approach likely failed, because the model used the whole image as an input and therefore recieved too much uneccecary information. 
-We also assume, that the conditioning method was too weak to have an influence. \\
-\textbf{Classification.} Because we used discrete control signals (as described in section \ref{sec:datacollection}) during data collection, we also tried if the model can accurately classify when to do which action.
-The model therefore had 3 output neurons, referring to the three actions: 'w' = straight, 'w' + 'a' = left turn, 'w' + 'd' right turn. 
-We tried this in combination with the multible head architecture from section \ref{sec:MH}. 
-We observed, that the model is able to control the Duckiebot, but also shows a highly non-smooth and zigzagy driving style. (\textcolor{red}{link to a video?})
-We therefore decided not to pursue this approach any further.
-
-
-\section{Inference Optimization}
-steps that we took to make the inference fast and stable (running it wothout Docker for example...)
-
-% \section{Getting High Level Commands from a VLM}
-% @Pankaj
-
-\chapter{Experiments and Ablations}
-In this section we want to test \textbf{a)} whether the MH or the FiLM architecture performs better, \textbf{b)} which inference variant is the most stable and 
-\textbf{c)} if our DAgger-like finetune technique helps to improve the succhess rate of our models. To achieve this, we define x tasks. 
-First we isolate the 4 intents on different situations. 
-We then also test on one long complex track, that requires all intents and long-term robustness.
-
-
-\section{Results}
-The exact task definitions can be observed in fig. \ref{fig:tasks}. 
-For each task, we test our model five times in each direction of travel and report how often the model succeeds. 
-The results can be viewed in table \ref{tab:results}. 
-\textbf{Bold values} are the best values among a task. \\
-
-\textcolor{red}{Interpretation of results... (also write about the parameter size of the models somewhere?)}
-
-\begin{table}[t]
-\centering
-\caption{Success rates for the evaluated tasks on five runs each. \textcolor{red}{Ideally we can combine left and right rows in 1 to save space..}}
-\label{tab:results}
-
-\small
-\setlength{\tabcolsep}{3pt} % default is 6pt
-
-\begin{tabular}{lcccccc}
-\toprule
-&
-\multicolumn{3}{c}{\textbf{Multiple Heads}} &
-\multicolumn{3}{c}{\textbf{FiLM}} \\
-\cmidrule(lr){2-4}\cmidrule(lr){5-7}
-\textbf{Task} &
-\textbf{Docker} &
-\textbf{Duckiebot} &
-\textbf{DAgger?} &
-\textbf{Docker} &
-\textbf{Duckiebot} &
-\textbf{DAgger?} \\
-\midrule
-
-\multicolumn{7}{l}{\textit{Lane following}} \\
-Semicircle left (Fig.~\ref{fig:task1pp}) & ? & ? & ? & ? & ? & ? \\
-Semicircle right (Fig.~\ref{fig:task1pp}) & ? & ? & ? & ? & ? & ? \\
-long corner left (Fig.~\ref{fig:task2})   & ? & ? & ? & ? & ? & ? \\
-long corner right (Fig.~\ref{fig:task2})   & ? & ? & ? & ? & ? & ? \\
-\addlinespace
-
-\multicolumn{7}{l}{\textit{Straight at intersection}} \\
-Task 1 & ? & ? & ? & ? & ? & ? \\
-Task 2 & ? & ? & ? & ? & ? & ? \\
-Task 3 & ? & ? & ? & ? & ? & ? \\
-Task 4 & ? & ? & ? & ? & ? & ? \\
-\addlinespace
-
-\multicolumn{7}{l}{\textit{Left turn at intersection}} \\
-Task 1 & ? & ? & ? & ? & ? & ? \\
-Task 2 & ? & ? & ? & ? & ? & ? \\
-Task 3 & ? & ? & ? & ? & ? & ? \\
-Task 4 & ? & ? & ? & ? & ? & ? \\
-\addlinespace
-
-\multicolumn{7}{l}{\textit{Right turn at intersection}} \\
-Task 1 & ? & ? & ? & ? & ? & ? \\
-Task 2 & ? & ? & ? & ? & ? & ? \\
-Task 3 & ? & ? & ? & ? & ? & ? \\
-Task 4 & ? & ? & ? & ? & ? & ? \\
-\addlinespace
-
-\multicolumn{7}{l}{\textit{Long experiment}} \\
-Task 1 & ? & ? & ? & ? & ? & ? \\
-Task 2 & ? & ? & ? & ? & ? & ? \\
-Task 3 & ? & ? & ? & ? & ? & ? \\
-Task 4 & ? & ? & ? & ? & ? & ? \\
-
-\bottomrule
-\end{tabular}
-\end{table}
-
-\chapter{Remaining Problems}
-Write here what we were not able to solve 
-
-% ... input content via other .tex files
-\chapter{Conclusion and Future Work}
-\label{sec:conclusion}
-
-To conclude... \\
-
-Future work: With our learning based approach, we provide robust models, that can control the Duckiebot relyable. 
-However, we did not incorperate street lights and pedestrains yet. Also, a fully autonomous car should also be able to navigate through the Duckietown by itself.
-To achieve this, a high-level planner like A* or the continous version Anytime A* \textcolor{red}{(refence!!)} is needed to get the high level commands. 
-Another way to get these is \textcolor{red}{the VLM approach of @Pankaj...} We leave these challenges as future work. 
 
 \appendix
-\chapter{Pictures of Task Definitions?}
 
-\begin{figure}[h]
-    \centering
+\input{chapters/task_def}
 
-    % Erste Zeile
-    \begin{subfigure}{0.45\textwidth}
-        \centering
-        \includegraphics[width=0.8\linewidth, angle=90]{task1.png}
-        \caption{Task 1 gemini stil}
-        \label{fig:task1}
-    \end{subfigure}
-    \hfill
-    \begin{subfigure}{0.45\textwidth}
-        \centering
-        \includegraphics[width=0.8\linewidth, angle=90]{arrows.png}
-        \caption{Task 1 with arrows}
-        \label{fig:task1arrows}
-    \end{subfigure}
+\input{chapters/architectures}
 
-    \vspace{0.5cm}
-
-    % Zweite Zeile
-    \begin{subfigure}{0.45\textwidth}
-        \centering
-        \includegraphics[width=0.8\linewidth]{taks1.jpeg}
-        \caption{Semicircle: Drive this semicyrcle five times in each direction.}
-        \label{fig:task1pp}
-    \end{subfigure}
-    \hfill
-    \begin{subfigure}{0.45\textwidth}
-        \centering
-        \includegraphics[width=0.8\linewidth, angle=90]{task2.jpeg}
-        \caption{long corner: 5 times in each direction}
-        \label{fig:task2}
-    \end{subfigure}
-
-    \caption{Tasks from Experiment section.}
-    \label{fig:tasks}
-\end{figure}
-
-\chapter{Network architures}
-
-\begin{figure}[h]
-    \centering
-    \includegraphics[width=0.8\linewidth]{pilotnet_4_heads/pilotnet_gated.png}
-    \caption{Architecture with multible heads}
-    \label{fig:multibleHeads}
-\end{figure}
-
-\begin{figure}[h]
-    \centering
-    \includegraphics[width=0.8\linewidth]{pilotnet_film/pilotnet_film.png}
-    \caption{FiLM architecture}
-    \label{fig:FiLM}
-\end{figure}
-
-\chapter{Contributions}
+\input{chapters/contributions}
 
 \bibliographystyle{alpha}
 \bibliography{bibliography}

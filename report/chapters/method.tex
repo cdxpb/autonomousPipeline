@@ -1,0 +1,14 @@
+\chapter{Method}
+\label{chapter:method}
+
+To overcome the described issues, we try to control our bot using neural networks. 
+We solve ambiguous situations like intersections by \textit{conditioning} our model on \textit{high-level commands} or \textit{intents} $c_t$. 
+In the following, we describe how we collected the needed data, which network architectures we used, how we trained them, and how we improved the inference. 
+ 
+\input{chapters/sections/data_collection}
+ 
+\input{chapters/sections/yolo}
+
+\input{chapters/sections/cil}
+
+\input{chapters/sections/inference_optim}
