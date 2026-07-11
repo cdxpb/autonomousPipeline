@@ -5,10 +5,10 @@
 # Usage:
 #   bash run_robot_native.sh --approach 7
 #   bash run_robot_native.sh --approach 5 --backend onnx    # fallback/A-B testing
-#   bash run_robot_native.sh --approach 7 --model-set full  # older 480x640 models
+#   bash run_robot_native.sh --approach 7 --model-set full --no-telemetry  # older 480x640 models
 #   bash run_robot_native.sh --approach 7 --no-telemetry
 #   bash run_robot_native.sh --approach 5 --telemetry-every-n 5 --model-set full
-#   bash run_robot_native.sh --approach 5 --yolo-backend tensorrt --pilotnet-backend onnx
+#   bash run_robot_native.sh --approach 5 --yolo-backend tensorrt --pilotnet-backend tensorrt
 #   bash run_robot_native.sh --approach 7 --smoothing 0.3   # EMA-smooth published velocity (1.0 = off)
 
 set -e

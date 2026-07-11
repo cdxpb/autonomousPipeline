@@ -3,6 +3,7 @@ import os
 import json
 import argparse
 import time
+from collections import deque
 import requests
 import rospy
 import cv2
@@ -109,6 +110,14 @@ class AutonomousDriverUI(QMainWindow):
         # Load management
         self.target_fps = 12
         self.last_frame_time = 0.0
+        self.last_publish_time = None
+
+        # rolling baseline for the robot<->Mac clock offset (they don't share NTP, so the raw
+        # recv_time - capture_stamp gap includes a constant clock-skew term that can dwarf and
+        # even sign-flip the real transit delay). The minimum observed gap over a recent window
+        # approximates that fixed skew (+ best-case transit); see _log_timing.
+        self._net_offset_window = deque(maxlen=200)
+        self._clock_skew_warned = False
 
         # Thread-safe communication bridge
         self.bridge = TelemetryBridge()
@@ -438,18 +447,51 @@ class AutonomousDriverUI(QMainWindow):
             self.ort_session = ort.InferenceSession(f"{self.model_path}.onnx")
 
 
+    def _log_timing(self, checkpoints, img_capture_stamp):
+        # checkpoints: [(label, time.time()), ...] recorded through the frame's processing.
+        parts = [f"{label_b}={1000*(t_b - t_a):.1f}ms"
+                 for (_, t_a), (label_b, t_b) in zip(checkpoints, checkpoints[1:])]
+        recv_time = checkpoints[0][1]
+        node_total_ms = 1000 * (checkpoints[-1][1] - recv_time)
+
+        net_str = ""
+        if img_capture_stamp > 0:
+            raw_offset_ms = 1000 * (recv_time - img_capture_stamp)
+            self._net_offset_window.append(raw_offset_ms)
+            baseline_ms = min(self._net_offset_window)
+            
+            net_latency_ms = raw_offset_ms - baseline_ms
+            if abs(baseline_ms) > 50 and not self._clock_skew_warned:
+                rospy.logwarn(
+                    f"Detected ~{baseline_ms:.0f}ms clock offset between this Mac and the robot "
+                    f"(unsynced clocks, not real latency) -- network timings below are baseline-"
+                    f"calibrated to compensate. Sync NTP/chrony on both ends for absolute numbers."
+                )
+                self._clock_skew_warned = True
+            e2e_ms = net_latency_ms + node_total_ms
+            net_str = f"net={net_latency_ms:.1f}ms e2e={e2e_ms:.1f}ms "
+
+        rospy.loginfo_throttle(
+            1.0,
+            f"[timing] {net_str}" + " ".join(parts) + f" node_total={node_total_ms:.1f}ms"
+        )
+
     def image_cb(self, msg):
         try:
+            checkpoints = [("recv", time.time())]
+            img_capture_stamp = msg.header.stamp.to_sec()
+
             # 1. Decode Image Safely
             np_arr = np.frombuffer(msg.data, np.uint8)
             cv_image = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
-            
+
             if cv_image is None or cv_image.size == 0:
                 rospy.logwarn_throttle(2.0, "Received empty or corrupted image frame.")
                 return
 
             rgb_image = cv2.cvtColor(cv_image, cv2.COLOR_BGR2RGB)
             ui_model_view = None
+            checkpoints.append(("decode", time.time()))
 
             # 2. Preprocessing
             if self.skip_segmentation:
@@ -462,10 +504,12 @@ class AutonomousDriverUI(QMainWindow):
                     ui_model_view = cv2.resize(np.array(cropped_img), (224, 112))
                 else:
                     ui_model_view = np.zeros((112, 224, 3), dtype=np.uint8)
+                checkpoints.append(("preprocess", time.time()))
             else:
                 pil_image = Image.fromarray(rgb_image)
                 cropped_img = crop_image(pil_image)
-                
+                checkpoints.append(("preprocess", time.time()))
+
                 # Frame Rate Limiter
                 current_time = time.time()
                 if (current_time - self.last_frame_time) < (1.0 / self.target_fps):
@@ -478,14 +522,19 @@ class AutonomousDriverUI(QMainWindow):
                     img_to_send = cropped_img if self.approach in [5, 6, 7] else pil_image
                     
                     is_success, buffer = cv2.imencode(".jpg", cv2.cvtColor(np.array(img_to_send), cv2.COLOR_RGB2BGR))
+                    checkpoints.append(("jpeg_encode", time.time()))
                     if is_success:
                         try:
-                            # Send synchronous request
+                            # Send synchronous request -- this round-trip IS the wifi/LAN
+                            # latency to the segmentation server, separate from the
+                            # robot->Mac camera transport latency logged as wifi_net above.
+                            t_http_start = time.time()
                             response = requests.post(
                                 f"{server_url}/predict/segmentation",
                                 files={"file": ("frame.jpg", buffer.tobytes(), "image/jpeg")},
                                 timeout=2.0
                             )
+                            checkpoints.append(("seg_http_rtt", time.time()))
                             if response.status_code == 200:
                                 mask_bytes = response.content
                                 mask_np_arr = np.frombuffer(mask_bytes, np.uint8)
@@ -495,10 +544,10 @@ class AutonomousDriverUI(QMainWindow):
                                 else:
                                     raise ValueError("Failed to decode received mask")
                             else:
-                                rospy.logwarn_throttle(2.0, f"Server returned {response.status_code}")
+                                rospy.logwarn_throttle(2.0, f"Server returned {response.status_code} after {1000*(time.time()-t_http_start):.1f}ms")
                                 return
                         except requests.exceptions.RequestException as e:
-                            rospy.logwarn_throttle(2.0, f"Segmentation Server connection failed: {e}")
+                            rospy.logwarn_throttle(2.0, f"Segmentation Server connection failed after {1000*(time.time()-t_http_start):.1f}ms: {e}")
                             return
                 else:
                     # Local Inference
@@ -510,6 +559,7 @@ class AutonomousDriverUI(QMainWindow):
 
                     mask = yolo_results[0].semantic_mask.data.cpu()
                     mask_pil = Image.fromarray(mask.numpy())
+                    checkpoints.append(("yolo_local", time.time()))
 
                 if self.approach not in [5, 6, 7]:
                     mask_pil = crop_image(mask_pil)
@@ -523,6 +573,7 @@ class AutonomousDriverUI(QMainWindow):
                     
                 mask_gray = (np.array(resized_mask_pil) * 85).astype(np.uint8)
                 ui_model_view = cv2.cvtColor(cv2.applyColorMap(mask_gray, cv2.COLORMAP_JET), cv2.COLOR_BGR2RGB)
+                checkpoints.append(("seg_postprocess", time.time()))
 
             if self.approach == 4:
                 if len(self.frame_buffer) == 0:
@@ -643,9 +694,28 @@ class AutonomousDriverUI(QMainWindow):
                         rospy.logerr(f"CRITICAL ONNX MISMATCH! We sent: {mapping_debug} | ONNX Expected: {expected_debug}")
                         raise e # Re-raise to trigger the throttle block below
 
+                checkpoints.append(("model", time.time()))
+
                 if self.approach == 4:
                     self.prev_out1 = out1
                     self.prev_out2 = out2
+
+                # Staleness check: with no decoupled publish timer here, every publish follows
+                # a fresh inference -- but the receiving wheels/car driver just keeps executing
+                # whatever it last got, so a growing gap between publishes means the robot is
+                # riding an old command for longer than expected (inference/pipeline slowing down).
+                now_pub = time.time()
+                if self.last_publish_time is not None:
+                    gap_ms = 1000 * (now_pub - self.last_publish_time)
+                    expected_ms = 1000.0 / self.target_fps
+                    if gap_ms > 2 * expected_ms:
+                        rospy.logwarn_throttle(
+                            1.0,
+                            f"STALE velocity risk: {gap_ms:.0f}ms since the last command was published "
+                            f"(expected ~{expected_ms:.0f}ms at {self.target_fps} FPS) -- robot has been "
+                            f"executing the previous command for that long with nothing newer sent"
+                        )
+                self.last_publish_time = now_pub
 
                 # Publish Motor Commands
                 if self.output_mode == "twist":
@@ -660,6 +730,9 @@ class AutonomousDriverUI(QMainWindow):
                     cmd_msg.vel_left = float(out1)
                     cmd_msg.vel_right = float(out2)
                     self.cmd_pub.publish(cmd_msg)
+                checkpoints.append(("vel_published", time.time()))
+
+            self._log_timing(checkpoints, img_capture_stamp)
 
             # Safely relay everything to the Qt thread for live rendering
             if ui_model_view is not None:

@@ -104,7 +104,12 @@ class HeadlessAutonomousNode:
 
         self.prev_out1 = 0.0
         self.prev_out2 = 0.0
+
         
+        self.last_inference_time = time.time()
+        self.last_inference_img_stamp = 0.0
+        self.stale_cmd_warn_ms = rospy.get_param("~stale_cmd_warn_ms", 200.0)
+
         self.target_fps = rospy.get_param("~target_fps", 30)
         self.publish_telemetry = rospy.get_param("~publish_telemetry", True)
         # publish preview every Nth frame, not every frame (colormap+resize+encode ain't free)
@@ -241,6 +246,15 @@ class HeadlessAutonomousNode:
         rospy.loginfo(f"Headless Inference Node is UP and RUNNING! (approach={self.approach}, model_set={self.model_set}, crop_before_yolo={self.crop_before_yolo})")
 
     def _publish_motor_cmd(self, event):
+        cmd_age_ms = 1000 * (time.time() - self.last_inference_time)
+        if cmd_age_ms > self.stale_cmd_warn_ms:
+            rospy.logwarn_throttle(
+                1.0,
+                f"STALE velocity: last inference completed {cmd_age_ms:.0f}ms ago "
+                f"(motor timer @ {self.motor_pub_hz}Hz keeps resending vel=({self.last_out1:.2f}, {self.last_out2:.2f})) "
+                f"-- inference is falling behind, robot is driving on old data"
+            )
+
         if self.output_mode == "twist":
             cmd_msg = Twist2DStamped()
             cmd_msg.header.stamp = rospy.Time.now()
@@ -420,6 +434,8 @@ class HeadlessAutonomousNode:
             self.smoothed_out2 = self.smoothing_alpha * out2_clamped + (1 - self.smoothing_alpha) * self.smoothed_out2
             self.last_out1 = self.smoothed_out1
             self.last_out2 = self.smoothed_out2
+            self.last_inference_time = time.time()
+            self.last_inference_img_stamp = msg.header.stamp.to_sec()
 
             # State Telemetry (raw model output, pre-clamp/pre-smoothing, so you can compare
             # against what's actually being sent to the motors)
