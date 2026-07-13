@@ -1,9 +1,5 @@
-\subsection{Multible head architecture (MH)}
+\subsection{Multiple Head Architecture (MH)}
 \label{subsec:mh}
 
-\textbf{Architecture.} As vizualized in fig. \ref{fig:multibleHeads}, we first pass the current frame $f_t$ to a CNN backbone to produce visual features. 
-Based on the current intent, we then pass these features to a specialized head \cite{CodevillaMH}, which then predicts the target wheel velocities $MH_{\theta}(s_t, c_t) \approx v_t$. \\
-\textbf{Training.} We train the CNN and the four heads end-to-end using a 80/20 train/test split and minimize a simple MSE-loss $\mathcal{L}(\theta) = \frac{1}{\vert \mathcal{B} \vert}\sum_{(s_t, c_t, v_t) \in \mathcal{B}} (MH_{\theta}(s_t, c_t) - v_t)^2$, where $\mathcal{B}$ is a batch with batchsize $\vert \mathcal{B}\vert = 64$. 
-We use Adam as an optimizer. 
-Since the intents are not equally distributed in the dataset ('lane following' $\approx 73 \%$, 'left' $\approx 11 \%$, 'straight' $\approx 10 \%$, 'right' $\approx 6 \%$), we oversample the 'left', 'right', and 'straight' intents to get 40 \% of lane following and 20 \% of the other intents during training. 
-We observed that this detail is crucial to get a successful model. In the end, we use the model with the lowest validation loss.  
+As vizualized in figure \ref{fig:multibleHeads}, we first pass the current frame $f_t$ to a CNN backbone to produce visual features. 
+Based on the current intent, we then pass these features to a specialized head \cite{CodevillaMH}, which then predicts the target wheel velocities $MH_{\theta}(s_t, c_t) \approx v_t$.  

@@ -1,11 +1,10 @@
-\subsection{FiLM}
+\subsection{Feature-wise Linear Modulation (FiLM)}
 \label{subsec:film}
 
-\textbf{Architecture.} \\
-The second model we train also uses convolutional and linear layers to predict the wheel velocities given a segmented input frame, but it relies on the Feature-wise Linear Modulation (FiLM) \cite{Perez2017FiLMVR} conditioning mechanism for the high-level commands.
+The second model we train also uses convolutional and linear layers to predict the wheel velocities given a segmented input frame, but it relies on the FiLM \cite{Perez2017FiLMVR} conditioning mechanism for the high-level commands.
 Given a feature map $x_{\text{in}}$ a FiLM layer learns a shift coefficient $\beta$ and scale coefficient $\gamma$ that augment the input $x_{\text{out}} = \gamma \odot x_{\text{in}} + \beta$.
 A convolutional layer is augmented at the channel dimension, each channel of the output feature map is scaled and shifted with a separate learnable shift and scale coefficient. A linear layer only needs one shift and scale pair.
 We implement a shared encoder that takes as input the one-hot encoded intent and projects to a 64-dimensional vector. Then for each convolutional and linear layer that is augmented with FiLM we have a seperate projection that outputs the correct dimensionality.
 For all FiLM layers we initialize $\gamma = 1$ and $\beta = 0$.
-A detailed overview of which layers include the FiLM conditioning can be found in \ref{fig:FiLM}.
+A detailed overview of the FiLM-conditioned neural network can be found in figure \ref{fig:FiLM}.
 
