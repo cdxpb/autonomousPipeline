@@ -1,8 +1,14 @@
 \chapter{Experiments and Ablations}
 \label{chapter:experiments}
 
-In this section we want to test \textbf{a)} whether the MH or the FiLM architecture performs better, 
-\textbf{b)} if a different oversampling strategy based on the baseline results improves performance \textcolor{red}{more detail here} 
+In this section we want to test our models on specific tasks and ablate training choices. 
+First we trained a baseline model for both the MH and the FiLM architecture to compare between these two approaches. 
+We refer to them as \textbf{a)} in table \ref{tab:results}. 
+We observed, that both models have specific weaknesses that may be due to underrepresentation in our oversampling stretegy. 
+Therefore we tried another oversampling strategy, which we will describe in the results section \ref{sec:results}. 
+In table \ref{tab:results}, we will refer to these two models as \textbf{b)}. \textcolor{red}{more detail here?} \\
+
+\textcolor{red}{write this in another section: }\\
 \textbf{c)} if the intent-shifting augmentation helps to make model more robust regarding the intent setting. \textcolor{red}{more detail}
 To achieve this, we define x tasks. 
 First we isolate the 4 intents on different situations. 
