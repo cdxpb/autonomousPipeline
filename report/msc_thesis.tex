@@ -1,6 +1,13 @@
 \documentclass[a4paper,cleardoubleempty,BCOR1cm,oneside]{scrbook} % added oneside here
 \input{header}
 
+\usepackage{etoolbox}
+\makeatletter
+\patchcmd{\scr@startchapter}{\if@openright\cleardoublepage\else\clearpage\fi}{}{}{%
+  \typeout{** Patch fehlgeschlagen! **}%
+}
+\makeatother
+
 \title{Conditional Imitation Learning with Duckietown}
 \author{DuckieExpress}
 
@@ -11,7 +18,7 @@
 
 \input{chapters/abstract}
 
-\tableofcontents
+%\tableofcontents
 
 \input{chapters/introduction}
 
@@ -19,7 +26,7 @@
  
 \input{chapters/experiments}
 
-\input{chapters/remaining}
+% \input{chapters/remaining}
 
 \input{chapters/conclusion}
 

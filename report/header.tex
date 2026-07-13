@@ -85,3 +85,9 @@
 
 \def\code#1{{\tt{#1}}}
 
+% added this to dont have a newpage for a new chapter
+\usepackage{etoolbox}
+\makeatletter
+\patchcmd{\chapter}{\if@openright\cleardoublepage\else\clearpage\fi}{}{}{}
+\makeatother
+
