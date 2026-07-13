@@ -5,11 +5,11 @@
 \textcolor{red}{The following is my summary—we should go over this together.} \\
 Duckietown is an educational and research platform that enables the exploration of autonomous driving concepts using a simple and low-cost environment. 
 It also provides Learning Experiences (LX) in which we learned about basic concepts of self-driving cars. 
-However, a number of problems arose during the LX that made it difficult or even impossible to control the Duckiebot reliably: \\
-Most importantly, our Duckiebot shows \textbf{strong drift}, likely due to hardware issues. 
-Because the provided odometry algorithms rely on correct wheel information, we were not able to control our Duckiebot with a PID controller. \\
-Also, in the Computer Vision LX, we were supposed to do find lower- and upper-bounds of HSV values by hand to correctly segment lanes in pictures that are taken by the camera of the bot. 
-However, we were not able to find good values, that are \textbf{robust under every lighting condtion}. 
-As a consequence, the lane following module was not robust. \\
-We tried to adress these challenges via \textbf{conditional imitation learning} and making use of a small \textbf{segmentation model}. 
-We find that this pipeline enables relyable control of our bot. 
+However, a number of problems arose during the LX's that made it difficult or even impossible to control the Duckiebot reliably.
+Most important, our Duckiebot shows \textbf{strong drift}, likely due to hardware issues. 
+Because the provided odometry algorithms rely on correct wheel information we were not able to control our Duckiebot with a PID controller.
+Another problem we encountered was in the Computer Vision LX. We were supposed to find lower- and upper-bounds of HSV values by hand to correctly segment lanes in the images that are recorded by the bot. 
+However, we were not able to find good values that are \textbf{robust under various lighting conditions}. 
+As a consequence, the lane following module did not work well.
+In this report we address these challenges by using \textbf{conditional imitation learning} on a \textbf{segmented image}. 
+We find that this pipeline enables reliable control of our Duckiebot. 
