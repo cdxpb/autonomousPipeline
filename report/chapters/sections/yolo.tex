@@ -7,7 +7,9 @@ Concretely we train the model to predict 3 semantic classes: the white lane mark
 To train the YOLO model we recorded a dataset of around 5.000 images while driving around Duckietown and then generated high-quality masks with the SAM3 \cite{carion2026sam} model from Meta.
 These masks serve as the ground-truth labels when training the YOLO model.
 During training we used the pretrained yolo26n-sem checkpoint from the ultralytics library with default settings, only adjusting the input image size, and trained for 5 epochs.
-The resulting YOLO model produces very good segmentations of the lane markings in Duckietown. See figure \ref{fig:sem_example} for an example segmentation mask. \\
+The resulting YOLO model produces very good segmentations of the lane markings in Duckietown.
+See figure \ref{fig:sem_example} for an example segmentation mask.
+The predicted segmentations mask $s_t$ is then used as the input for the CNN models described in section \ref{sec:cil}.
 
 \begin{figure}[h]
     \center
