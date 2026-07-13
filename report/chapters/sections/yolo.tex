@@ -1,11 +1,13 @@
 \section{YOLO segmentation model}
 \label{sec:yolo}
 
-Because we don't have street lights or pedestrains in the Duckietown, the street lanes are the only needed information for steering. 
-Due to the described problems with the lane detection LX, we train a small YOLO model to segment the lanes in the given frame. 
-We also crop the image, such that only the bottom is visible. (see fig \ref{fig:sem_example}:) \\
-\textbf{Architecture.} \\
-\textbf{Training.}
+We trained a YOLO26 semantic segmentation model by using the ultralytics python library. We used the nano variant which has 1.6M parameters.
+The model is used in our pipeline to preprocess the images that are recorded by the duckiebot before we pass it into the CNN that controls the duckiebot's wheel velocities.
+Concretely we train the model to predict 3 semantic classes: the white lane markings, the dashed yellow lane markings and the red markings.
+To train the YOLO model we recorded a dataset of around 5.000 images while driving around Duckietown and then generated high-quality masks with the SAM3 \cite{carion2026sam} model from Meta.
+These masks serve as the ground-truth labels when training the YOLO model.
+During training we used the pretrained yolo26n-sem checkpoint from the ultralytics library with default settings, only adjusting the input image size, and trained for 5 epochs.
+The resulting YOLO model produces very good segmentations of the lane markings in Duckietown. See figure \ref{fig:sem_example} for an example segmentation mask. \\
 
 \begin{figure}[h]
     \center
