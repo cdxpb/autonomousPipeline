@@ -2,62 +2,49 @@
 \label{sec:results}
 
 The exact task definitions can be observed in fig. \ref{fig:tasks}. 
+We have tasks that test each intent in isolation and also do a long run to test long term stability. 
 For each task, we test our model five times in each direction of travel and report how often the model succeeds. 
 The results can be viewed in table \ref{tab:results}. 
-\textbf{Bold values} are the best values among a task. \\
+We observe that in general, both architectures are able to control our bot relyable, but have some specific weaknesses or biases. 
+For example the MH architecture sometimes fails on the isolated intent tasks, especially on left turns at intersections, 
+but is more robust at the long-term experiment, because it is able to recover from slight errors. 
+FiLM on the other hand is basically perfect on the isolated intent tasks (not as accurate on straight intent), but surprisingly is not as robust on the long term task. 
+Concerning \textbf{a)} we find, that FiLM is in general a bit more accurate. 
+To improve the weaknesses of our models, we retrained our models with an adjusted sampling strategy. 
+For MH we used $[30, 20, 30, 20]$ and for FiLM $[30, 30, 20, 20]$. 
+So \textbf{b)}, we observe, that this indeed helped to fix weaknesses. 
+Especially the MH model improved the performance on the left turns severly but slightly loses performance on lane following. 
+Another unintentional and interesting observation is, that both models are robust under wrong intent setting. 
+For example given the right intent, the MH model can also do lane following as long it has no left corners, enabling it to run in a right turn loop. 
 
-\textcolor{red}{Interpretation of results... (also write about the parameter size of the models somewhere?)} \\
-MH b) the left and right is good (right even can do lane following when there is no left corner) - lane following 
-gets worse.. long experiment is also not as accurate as FiLM b). \\
-FiLM also is able to do lane following given another intent... 
 
 \begin{table}[t]
 \centering
-\caption{Success rates for the evaluated tasks on five runs each. \textcolor{red}{Ideally we can combine left and right rows in 1 to save space..}}
+\caption{Success rates for the evaluated tasks on five runs each.}
 \label{tab:results}
 
 \small
 \setlength{\tabcolsep}{3pt} % default is 6pt
 
-\begin{tabular}{lcccccc}
+\begin{tabular}{lcccc}
 \toprule
 &
-\multicolumn{3}{c}{\textbf{Multiple Heads}} &
-\multicolumn{3}{c}{\textbf{FiLM}} \\
-\cmidrule(lr){2-4}\cmidrule(lr){5-7}
+\multicolumn{2}{c}{\textbf{Multiple Heads}} &
+\multicolumn{2}{c}{\textbf{FiLM}} \\
+\cmidrule(lr){2-3}\cmidrule(lr){4-5}
 \textbf{Task} &
-\textbf{Baseline a)} &
+\textbf{a)} &
 \textbf{b)} &
-\textbf{c)} &
-\textbf{Baseline a)} &
-\textbf{b)} &
-\textbf{c)} \\
+\textbf{a)} &
+\textbf{b)} \\
 \midrule
 
-\multicolumn{7}{l}{\textit{Lane following}} \\
-Semicircle left (Fig.~\ref{fig:task1pp}) & 5 & 4 & ? & 5 & 5 & ? \\
-Semicircle right (Fig.~\ref{fig:task1pp}) & 4 & 5 & ? & 5 & 5 & ? \\
-long corner left (Fig.~\ref{fig:task2})   & 5 & 5 & ? & 5 & 5 & ? \\
-long corner right (Fig.~\ref{fig:task2})   & 5 & 4 & ? & 5 & 5 & ? \\
-\addlinespace
-
-\multicolumn{7}{l}{\textit{Straight at intersection}} \\
-4-way  & 5 & 5 & ? & 5 & 5 & ? \\
-3-way & 5 & 5 & ? & 5 & 5 & ? \\
-\addlinespace
-
-\multicolumn{7}{l}{\textit{Left turn at intersection}} \\
-4-way & 4 & 5 & ? & 5 & 5 & ? \\
-3-way & 2 & 5 & ? & 5 & 5 & ? \\
-\addlinespace
-
-\multicolumn{7}{l}{\textit{Right turn at intersection}} \\
-4-way & 5 & 5 & ? & 5 & 5 & ? \\
-3-way & 5 & 5 & ? & 5 & 5 & ? \\
-\addlinespace
-
-\multicolumn{7}{l}{\textit{Long experiment}} \\
-long run & 5 & 5$^*$ & ? & 4 & 5 & ? \\
+Semicircle (left/right) (Fig.~\ref{fig:task1pp}) & 5/4 & 4/5 & 5/5 & 5/5 \\
+Long corner (left/right) (Fig.~\ref{fig:task2})   & 5/5 & 5/4 & 5/5 & 5/5 \\
+Straight at intersection (4-way/3-way) & 5/5 & 5/5 & 5/5 & 5/5 \\
+Left turn at intersection (4-way/3-way) & 4/2 & 5/5 & 5/5 & 5/5 \\
+Right turn at intersection (4-way/3-way) & 5/5 & 5/5 & 5/5 & 5/5 \\
+Long run & 5 & 5$^*$ & 4 & 5 \\
 
 \bottomrule
 \end{tabular}
