@@ -1,16 +1,17 @@
 \section{Other Approaches}
 \label{appendix:other}
 
-\textcolor{red}{move this to appendix...} \\
-In this section, we'd like to briefly describe some other architectures that we tried but that either failed or did not produce the desired results. \\
-\textbf{Naive approach.} First we tried to pass the current RGB frame $f_t$ directly a neural network (CNN with fully-connected layers afterwards). 
-The intent was fed into the linear layer as a one-hot encoded four dimensional vector. 
-We observed, that the model drove forward, but was barely able to react on changes to the lane. This approach likely failed, because the model used the whole image as an input and therefore recieved too much uneccecary information. 
-We also assume, that the conditioning method was too weak to have an influence. \\
-\textbf{Classification.} Because we used discrete control signals (as described in section \ref{sec:datacollection}) during data collection, we also tried if the model can accurately classify when to do which action.
-The model therefore had 3 output neurons, referring to the three actions: 'w' = straight, 'w' + 'a' = left turn, 'w' + 'd' right turn. 
-We tried this in combination with the multible head architecture from section \ref{sec:MH}. 
-We observed, that the model is able to control the Duckiebot, but also shows a highly non-smooth and zigzagy driving style. (\textcolor{red}{link to a video?})
-We therefore decided not to pursue this approach any further.
+In this section we briefly describe some other methods that we tried but which either failed or did not produce the desired results.
+
+\subsection{Naive approach}
+Initially we attempted to pass the RGB frames directly to the neural network (CNN followed by fully-connected layers). 
+The intent was provided to the fully-connected layers as a one-hot encoded vector. We observed that the model drove forward, but generalized poorly and had issues remaining within the lanes. 
+We hypothesize that the approach likely failed because the model used complete frames as input. It was therefore required to learn both relevant input features and the control policy simultaneously, which is a difficult task when data is limited.
+Additionally, we believe that the conditioning method was too weak to give the model a sufficient learning signal.
+
+\subsection{Classification} 
+As described in section \ref{sec:datacollection}, we utilized discrete control signals during the data collection phase. Inspired by this, we attempted to train the model to accurately predict appropriate actions given the current input frame. 
+The output layer therefore consisted of 3 neurons, referring to the actions: W = "straight", W + A = "left turn" and W + D = "right turn". We tried this in combination with the multiple head architecture from Section \ref{subsec:mh} and 
+observed that the model was able to control the Duckiebot, but also demonstrated a highly non-smooth and zigzagy driving style. For this reason we decided not to pursue the approach any further.
 
 \input{chapters/sections/subsections/regularization}
