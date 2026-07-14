@@ -168,6 +168,7 @@ class NavFSM:
             action, target = self._current
             if action == "stop":
                 self.state = FSMState.DONE
+                return self._emit("stop", ans)
             elif self.count >= target:
                 self.state = FSMState.EXECUTING
                 self.count = 0
@@ -200,10 +201,12 @@ class NavFSM:
         if self._confirmed(self.exit_buf, self.cfg.exit_window):
             self.plan.pop(0)
             nxt, _ = self._current
-            self.state    = FSMState.DONE if (nxt == "stop" or not self.plan) \
-                            else FSMState.LANE_FOLLOWING
+            done          = nxt == "stop" or not self.plan
+            self.state    = FSMState.DONE if done else FSMState.LANE_FOLLOWING
             self.cooldown = self.cfg.cooldown_frames
             self.exit_buf = []
+            if done:
+                return self._emit("stop", ans)
         return self._emit(action, ans)
 
     def _emit(self, intent: str, ans: Optional[str]) -> str:
@@ -218,37 +221,14 @@ class NavFSM:
 # --- SmolVLM2 oracle ---
 
 APPROACH_PROMPT = (
-    "This is a forward-facing camera image from a small robot driving along a road with "
-    "painted lane markings: a yellow dashed line down the center and solid white lines "
-    "along the outer edges. Where two or more roads meet, a 4-way crossing or a "
-    "T-junction, the lane markings open up (the lines stop, fork, or are crossed by a "
-    "red or orange stop line) and the far road(s) become visible. "
-    "Look at the road ahead of the robot, including anything visible in the distance, "
-    "not just directly under the robot. "
-    "If a junction like this is visible ahead OR the robot is currently at one, AND "
-    "driving {direction} from there leads onto a real, open road (not blocked by grass, "
-    "a wall, or empty space), answer 'yes'. "
-    "If a junction is visible ahead OR the robot is currently at one, but {direction} is "
-    "NOT an open road from there (for example a T-junction where that side has no road), "
-    "answer 'pass'. "
-    "If there is no junction visible ahead or nearby and the robot is simply following "
-    "its lane (including a gentle curve), answer 'no'. "
-    "Answer with exactly one word: yes, pass, or no."
+    "Is there a road junction ahead, and is {direction} an open path from it? "
+    "Answer yes (junction, {direction} open), pass (junction, {direction} blocked), "
+    "or no (no junction). One word only."
 )
 
 EXIT_PROMPT = (
-    "This is a forward-facing camera image from a small robot driving along a road with "
-    "painted lane markings: a yellow dashed center line and solid white outer edge "
-    "lines. The robot recently entered a junction (a 4-way crossing or T-junction, where "
-    "the lane markings open up, a stop line is often painted across the road, and other "
-    "roads become visible). "
-    "Look at the road immediately at and around the robot right now. "
-    "If the robot is back on a normal single lane, a continuous yellow dashed center "
-    "line with white edge lines on both sides, with no open junction area or stop line "
-    "at the robot's current position, answer 'yes'. "
-    "If the robot is still inside, crossing, or right at the junction (open road area, a "
-    "stop line, or multiple lanes visibly converging at the robot), answer 'no'. "
-    "Answer with exactly one word: yes or no."
+    "Has the robot cleared the junction and returned to normal lane-following? "
+    "Answer yes or no. One word only."
 )
 
 

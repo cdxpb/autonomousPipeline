@@ -93,14 +93,17 @@ class AutonomousDriverUI(QMainWindow):
             self.model_path = "../autonomouspipeline/models/pilotnet/segRegNHeadsTemporal"
             self.yolo_path = "../autonomouspipeline/models/yolo_model/yolo_v1_best.pt"
         elif self.approach == 5:
-            self.model_path = "../autonomouspipeline/models/pilotnet/best_model_regNheadv2"
+            # self.model_path = "../autonomouspipeline/models/pilotnet/best_model_regNheadv2"
+            self.model_path = "../autonomouspipeline/models/pilotnet/regression_best_model_OS"
             self.yolo_path = "../autonomouspipeline/models/yolo_model/yolo_model.pt"
         elif self.approach == 6:
             self.model_path = "../autonomouspipeline/models/pilotnet/best_model_approach6"
             self.yolo_path = "../autonomouspipeline/models/yolo_model/yolo_v1_best.pt"
         elif self.approach == 7:
-            self.model_path = "../autonomouspipeline/models/pilotnet/best_model_approach7"
+            # self.model_path = "../autonomouspipeline/models/pilotnet/best_model_approach7"
+            self.model_path = "../autonomouspipeline/models/pilotnet/film_best_model_OS"
             self.yolo_path = "../autonomouspipeline/models/yolo_model/yolo_model.pt"
+
 
         self.transform = get_eval_transforms()
         self.frame_buffer = []
@@ -587,118 +590,121 @@ class AutonomousDriverUI(QMainWindow):
 
             # 3. Inference Gate (Only runs if "START" is active)
             if self.is_autonomous_active:
-                intent_tensor = np.array([INTENT_MAP.get(self.current_intent, [1.0, 0.0, 0.0, 0.0])], dtype=np.float32)
+                if self.current_intent == "stop":
+                    out1, out2 = 0.0, 0.0
+                else:
+                    intent_tensor = np.array([INTENT_MAP.get(self.current_intent, [1.0, 0.0, 0.0, 0.0])], dtype=np.float32)
 
-                if self.active_backend == "PyTorch":
-                    img_t = torch.from_numpy(img_tensor).to(self.device)
-                    intent_t = torch.from_numpy(intent_tensor).to(self.device)
+                    if self.active_backend == "PyTorch":
+                        img_t = torch.from_numpy(img_tensor).to(self.device)
+                        intent_t = torch.from_numpy(intent_tensor).to(self.device)
                     
-                    if self.approach == 4:
-                        vel_t = torch.tensor([[self.prev_out1, self.prev_out2]], dtype=torch.float32).to(self.device)
-                        with torch.no_grad():
-                            output = self.pt_model(img_t, vel_t, intent_t)
-                        out1, out2 = output[0][0].item(), output[0][1].item()
-                    else:
-                        with torch.no_grad():
-                            output = self.pt_model(img_t, intent_t)
-                        if self.approach == 3:
+                        if self.approach == 4:
+                            vel_t = torch.tensor([[self.prev_out1, self.prev_out2]], dtype=torch.float32).to(self.device)
+                            with torch.no_grad():
+                                output = self.pt_model(img_t, vel_t, intent_t)
                             out1, out2 = output[0][0].item(), output[0][1].item()
-                            # pred_action = torch.argmax(output, dim=1).cpu().item()
-                            # if self.output_mode == "twist":
-                            #     out1, out2 = self.action_to_twist(pred_action)
-                            # else:
-                            #     out1, out2 = self.action_to_vel(pred_action)
-                        elif self.approach == 6:
-                            pred_action = torch.argmax(output, dim=1).cpu().item()
-                            if self.output_mode == "twist":
-                                out1, out2 = self.action_to_twist(pred_action)
-                            else:
-                                out1, out2 = self.action_to_vel(pred_action)
                         else:
-                            out1, out2 = output[0][0].item(), output[0][1].item()
-
-                elif self.active_backend == "TensorRT":
-                    cuda.memcpy_htod(self.d_img_in, img_tensor)
-                    cuda.memcpy_htod(self.d_intent_in, intent_tensor)
-                    if self.approach == 4:
-                        vel_tensor = np.array([[self.prev_out1, self.prev_out2]], dtype=np.float32)
-                        cuda.memcpy_htod(self.d_vel_in, vel_tensor)
-                    self.context.execute_v2(bindings=self.bindings)
-                    h_output = np.empty((1, 4 if self.approach == 3 else (3 if self.approach == 6 else 2)), dtype=np.float32)
-                    cuda.memcpy_dtoh(h_output, self.d_output)
-                    if self.approach in [3, 6]:
-                        pred_action = np.argmax(h_output[0])
-                        if self.output_mode == "twist":
-                            out1, out2 = self.action_to_twist(pred_action)
-                        else:
-                            out1, out2 = self.action_to_vel(pred_action)
-                    else:
-                        out1, out2 = h_output[0][0], h_output[0][1]
-
-                elif self.active_backend == "ONNX Runtime":
-                    ort_inputs = {}
-                    
-                    # Ensure intent is strictly a 2D array: Shape (1, 4)
-                    raw_intent = INTENT_MAP.get(self.current_intent, [1.0, 0.0, 0.0, 0.0])
-                    # Catch if the map accidentally returns a nested list
-                    if isinstance(raw_intent, list) and isinstance(raw_intent[0], list):
-                        raw_intent = raw_intent[0]
-                    intent_tensor = np.array([raw_intent], dtype=np.float32)
-                    
-                    vel_tensor = None
-                    if self.approach == 4:
-                        vel_tensor = np.array([[self.prev_out1, self.prev_out2]], dtype=np.float32)
-
-                    for ort_in in self.ort_session.get_inputs():
-                        expected_shape = ort_in.shape
-                        in_name = ort_in.name
-                        in_type = ort_in.type
-                        
-                        # 1. Identify Intent (Usually 1D or 2D, or named 'intent'/'cmd')
-                        if (expected_shape and len(expected_shape) <= 2 and expected_shape[-1] == 4) or any(k in in_name.lower() for k in ['intent', 'cmd', 'command']):
-                            # Match the type ONNX expects (Fallback to float32)
-                            if 'int64' in in_type:
-                                ort_inputs[in_name] = intent_tensor.astype(np.int64)
+                            with torch.no_grad():
+                                output = self.pt_model(img_t, intent_t)
+                            if self.approach == 3:
+                                out1, out2 = output[0][0].item(), output[0][1].item()
+                                # pred_action = torch.argmax(output, dim=1).cpu().item()
+                                # if self.output_mode == "twist":
+                                #     out1, out2 = self.action_to_twist(pred_action)
+                                # else:
+                                #     out1, out2 = self.action_to_vel(pred_action)
+                            elif self.approach == 6:
+                                pred_action = torch.argmax(output, dim=1).cpu().item()
+                                if self.output_mode == "twist":
+                                    out1, out2 = self.action_to_twist(pred_action)
+                                else:
+                                    out1, out2 = self.action_to_vel(pred_action)
                             else:
-                                ort_inputs[in_name] = intent_tensor.astype(np.float32)
-                                
-                        # 2. Identify Velocities (Approach 4)
-                        elif self.approach == 4 and ((expected_shape and len(expected_shape) == 2 and expected_shape[-1] == 2) or any(k in in_name.lower() for k in ['vel', 'state'])):
-                            if 'int64' in in_type:
-                                ort_inputs[in_name] = vel_tensor.astype(np.int64)
-                            else:
-                                ort_inputs[in_name] = vel_tensor.astype(np.float32)
-                                
-                        # 3. Identify Image (Usually 4D, or named 'input'/'img'/'x')
-                        else:
-                            if 'float64' in in_type:
-                                ort_inputs[in_name] = img_tensor.astype(np.float64)
-                            else:
-                                ort_inputs[in_name] = img_tensor.astype(np.float32)
+                                out1, out2 = output[0][0].item(), output[0][1].item()
 
-                    try:
-                        ort_outs = self.ort_session.run(None, ort_inputs)
+                    elif self.active_backend == "TensorRT":
+                        cuda.memcpy_htod(self.d_img_in, img_tensor)
+                        cuda.memcpy_htod(self.d_intent_in, intent_tensor)
+                        if self.approach == 4:
+                            vel_tensor = np.array([[self.prev_out1, self.prev_out2]], dtype=np.float32)
+                            cuda.memcpy_htod(self.d_vel_in, vel_tensor)
+                        self.context.execute_v2(bindings=self.bindings)
+                        h_output = np.empty((1, 4 if self.approach == 3 else (3 if self.approach == 6 else 2)), dtype=np.float32)
+                        cuda.memcpy_dtoh(h_output, self.d_output)
                         if self.approach in [3, 6]:
-                            pred_action = np.argmax(ort_outs[0][0])
+                            pred_action = np.argmax(h_output[0])
                             if self.output_mode == "twist":
                                 out1, out2 = self.action_to_twist(pred_action)
                             else:
                                 out1, out2 = self.action_to_vel(pred_action)
                         else:
-                            out1 = float(ort_outs[0][0][0]) 
-                            out2 = float(ort_outs[0][0][1])
-                    except Exception as e:
-                        # Log the exact dictionary mapping we attempted vs what ONNX wanted
-                        mapping_debug = {k: v.shape for k, v in ort_inputs.items()}
-                        expected_debug = {i.name: i.shape for i in self.ort_session.get_inputs()}
-                        rospy.logerr(f"CRITICAL ONNX MISMATCH! We sent: {mapping_debug} | ONNX Expected: {expected_debug}")
-                        raise e # Re-raise to trigger the throttle block below
+                            out1, out2 = h_output[0][0], h_output[0][1]
 
-                checkpoints.append(("model", time.time()))
+                    elif self.active_backend == "ONNX Runtime":
+                        ort_inputs = {}
+                    
+                        # Ensure intent is strictly a 2D array: Shape (1, 4)
+                        raw_intent = INTENT_MAP.get(self.current_intent, [1.0, 0.0, 0.0, 0.0])
+                        # Catch if the map accidentally returns a nested list
+                        if isinstance(raw_intent, list) and isinstance(raw_intent[0], list):
+                            raw_intent = raw_intent[0]
+                        intent_tensor = np.array([raw_intent], dtype=np.float32)
+                    
+                        vel_tensor = None
+                        if self.approach == 4:
+                            vel_tensor = np.array([[self.prev_out1, self.prev_out2]], dtype=np.float32)
 
-                if self.approach == 4:
-                    self.prev_out1 = out1
-                    self.prev_out2 = out2
+                        for ort_in in self.ort_session.get_inputs():
+                            expected_shape = ort_in.shape
+                            in_name = ort_in.name
+                            in_type = ort_in.type
+                        
+                            # 1. Identify Intent (Usually 1D or 2D, or named 'intent'/'cmd')
+                            if (expected_shape and len(expected_shape) <= 2 and expected_shape[-1] == 4) or any(k in in_name.lower() for k in ['intent', 'cmd', 'command']):
+                                # Match the type ONNX expects (Fallback to float32)
+                                if 'int64' in in_type:
+                                    ort_inputs[in_name] = intent_tensor.astype(np.int64)
+                                else:
+                                    ort_inputs[in_name] = intent_tensor.astype(np.float32)
+                                
+                            # 2. Identify Velocities (Approach 4)
+                            elif self.approach == 4 and ((expected_shape and len(expected_shape) == 2 and expected_shape[-1] == 2) or any(k in in_name.lower() for k in ['vel', 'state'])):
+                                if 'int64' in in_type:
+                                    ort_inputs[in_name] = vel_tensor.astype(np.int64)
+                                else:
+                                    ort_inputs[in_name] = vel_tensor.astype(np.float32)
+                                
+                            # 3. Identify Image (Usually 4D, or named 'input'/'img'/'x')
+                            else:
+                                if 'float64' in in_type:
+                                    ort_inputs[in_name] = img_tensor.astype(np.float64)
+                                else:
+                                    ort_inputs[in_name] = img_tensor.astype(np.float32)
+
+                        try:
+                            ort_outs = self.ort_session.run(None, ort_inputs)
+                            if self.approach in [3, 6]:
+                                pred_action = np.argmax(ort_outs[0][0])
+                                if self.output_mode == "twist":
+                                    out1, out2 = self.action_to_twist(pred_action)
+                                else:
+                                    out1, out2 = self.action_to_vel(pred_action)
+                            else:
+                                out1 = float(ort_outs[0][0][0]) 
+                                out2 = float(ort_outs[0][0][1])
+                        except Exception as e:
+                            # Log the exact dictionary mapping we attempted vs what ONNX wanted
+                            mapping_debug = {k: v.shape for k, v in ort_inputs.items()}
+                            expected_debug = {i.name: i.shape for i in self.ort_session.get_inputs()}
+                            rospy.logerr(f"CRITICAL ONNX MISMATCH! We sent: {mapping_debug} | ONNX Expected: {expected_debug}")
+                            raise e # Re-raise to trigger the throttle block below
+
+                    checkpoints.append(("model", time.time()))
+
+                    if self.approach == 4:
+                        self.prev_out1 = out1
+                        self.prev_out2 = out2
 
                 # Staleness check: with no decoupled publish timer here, every publish follows
                 # a fresh inference -- but the receiving wheels/car driver just keeps executing

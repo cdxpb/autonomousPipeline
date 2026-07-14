@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
 """
 Exports PilotNet Approach 5 (regNheadv2) and Approach 7 (FiLM) to ONNX.
-Replaces SafePool with equivalent static AvgPool2d kernels before exporting, the ONNX
-tracer chokes on AdaptiveAvgPool2d's non-divisible output sizes here.
+Replaces SafePool with equivalent static AvgPool2d kernels before exporting.
 
-Run this on your Mac (in ros_native env) before deploying to the Duckiebot:
+Run this in ros_native env before deploying:
     conda activate ros_native
     cd packages/cond_imitation_learning_pkg/src
     python3 export_onnx.py
@@ -34,11 +33,11 @@ def _patch_safe_pool(module, kernel, stride):
 # Feature map entering SafePool is 48 x 7 x 21 -> target (4, 7)
 # Static equivalent: AvgPool2d(kernel_size=(1,3), stride=(2,3))
 
-def export_approach7():
+def export_approach7(basename="film_best_model_OS"):
     from pilotnet_FiLM import ConditionalPilotNetFiLM
     model = ConditionalPilotNetFiLM()
-    pt_path  = os.path.join(MODEL_DIR, "best_model_approach7.pt")
-    out_path = os.path.join(MODEL_DIR, "best_model_approach7.onnx")
+    pt_path  = os.path.join(MODEL_DIR, f"{basename}.pt")
+    out_path = os.path.join(MODEL_DIR, f"{basename}.onnx")
 
     model.load_state_dict(torch.load(pt_path, map_location="cpu", weights_only=False))
     model.eval()
@@ -54,7 +53,7 @@ def export_approach7():
         output_names=["wheel_velocities"],
         dynamic_axes={"image_input": {0: "batch"}, "intent_input": {0: "batch"}, "wheel_velocities": {0: "batch"}},
     )
-    print(f"Approach 7 exported -> {out_path}")
+    print(f"Approach 7 ({basename}) exported -> {out_path}")
     _verify(out_path, dummy_img, dummy_intent, model)
 
 
@@ -89,8 +88,8 @@ class ConditionalPilotNetONNXWrapper(nn.Module):
 
 def export_approach5():
     from pilotnet_regNheadv2 import ConditionalPilotNet
-    pt_path  = os.path.join(MODEL_DIR, "best_model_regNheadv2.pt")
-    out_path = os.path.join(MODEL_DIR, "best_model_regNheadv2.onnx")
+    pt_path  = os.path.join(MODEL_DIR, "regression_best_model_OS.pt")
+    out_path = os.path.join(MODEL_DIR, "regression_best_model_OS.onnx")
 
     orig = ConditionalPilotNet()
     orig.load_state_dict(torch.load(pt_path, map_location="cpu", weights_only=False))
@@ -130,10 +129,14 @@ def _verify(onnx_path, dummy_img, dummy_intent, pt_model):
 
 
 if __name__ == "__main__":
-    print("Exporting Approach 7 (FiLM)...")
-    export_approach7()
+    for basename in [
+        "film_best_model_OS",
+    ]:
+        print(f"Exporting Approach 7 (FiLM) [{basename}]...")
+        export_approach7(basename)
+        print()
 
-    print("\nExporting Approach 5 (regNheadv2)...")
+    print("Exporting Approach 5 (regNheadv2)...")
     export_approach5()
 
     print("\nDone! Transfer to Duckiebot:")
