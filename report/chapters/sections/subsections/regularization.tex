@@ -6,7 +6,7 @@ Beyond the architectural and task-based approaches, we experimented with regular
 
 To test this, we trained the FiLM architecture with various time-shift values and qualitatively evaluated its performance on the Duckiebot. The regularization was implemented as a Gaussian distribution around the ground truth timestamp (illustrated in Figure \ref{fig:time_shift_distributions}). Given the 10Hz data collection rate, we tested velocity and intent label shifts at a standard deviation of 0.1s, both independently and in combination. Additionally, we tested a combined shift using a standard deviation of 0.05s, both with and without a 0.05s mean shift into the future.
 
-\begin{figure}[htbp]
+\begin{figure}[H]
     \centering
     \includegraphics[width=0.8\textwidth]{images/ablation/regularization/time_shift_distributions.png}
     \caption{\textbf{Time-shift regularization:} The figure illustrates the Gaussian distributions used for time-shift regularization.}
