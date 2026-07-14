@@ -1,18 +1,11 @@
 \subsection{Sim2Real Transfer}
 \label{appendix:rsim2real}
 
-Like the vast majority of deep learning applications, conditional imitation learning is exceedingly data hungry. Further more, the continuous, stochastic and partially-observable characteristics 
-of the environment the duckiebot needs to navigate exacerbates the issue. Even with a strong assumption/bias regarding the duckietown layout, approximately 11,000 samples were required for the CIL 
-models to reach the performance documented in this report. If the findings here are eventually expanded further into novel or more complex environments, a question that naturally arises is how to collect 
-the vast amounts of required data in a scalable fashion. We set out to evaluate the suitability of the simulation engine Duckiematrix for this purpose.
+Like the vast majority of deep learning applications, conditional imitation learning is exceedingly data-hungry. Furthermore, the continuous, stochastic, and partially observable characteristics of the environment the Duckiebot must navigate exacerbate this issue. Even with strong assumptions regarding the layout of the Duckietown environment, approximately 11,000 samples were required for the CIL models to reach the performance levels documented in this report. If these findings are to be extended to novel or more complex environments, a question that naturally arises is how to collect the vast amounts of required data in a scalable fashion. To this end, we evaluated the suitability of the Duckiematrix simulation engine.
 
-Since our pipeline follows a two-stage approach where the scene is first summarized into a semantic mask and a policy network subsequently predicts wheel velocities, our ablation study also focuses 
-on each component separately. Firstly, two datasets were collected using the same expert policy, with one being collected within the Duckiematrix environment and the other in real life on the physical duckiebot. 
-Both datasets were subsequently balanced to contain roughly the same distribution over intent classes, meaning that intersection and lane scenarios were represented equally in each. The first ablation 
-involved investigating the sim2real transfer of the YOLO model in terms of semantic segmentation performance. For this, the SAM 3 foundation model was used to annotate both the virtually and physically collected data 
-and YOLO26n semantic segmentation models were fine-tuned utilizing the resulting masks of lane markings. In the end, three YOLO26n variants were trained; one on only virtual Duckiematrix data, one on 
-solely physical data and one model after merging both data sources. All YOLO26n models were then evaluated quantitatively and qualitatively on the physically collected data, as this is the modality one ultimately wants to predict. 
-Samples are shown in Figure \ref{fig:sample_masks}. All models generally segmented accurately in regions close to the camera, but especially the model trained only on virtual data struggled to classify predictions correctly.
+Our pipeline follows a two-stage approach: the scene is first summarized into a semantic mask, and a policy network subsequently predicts wheel velocities. Consequently, our ablation study focuses on each component separately. We collected two datasets using the same expert policy, one within the Duckiematrix environment (~4,350 samples) and the other in real life on the physical Duckiebot (~3,750 samples). Both datasets were balanced to contain a similar distribution over intent classes, ensuring that intersection and lane-following scenarios were represented equally.
+
+The first ablation involved investigating the Sim2Real transfer of the segmentation model. We used the SAM 3 foundation model to annotate both the virtually and physically collected data. We then fine-tuned YOLO26n semantic segmentation models using the resulting lane-marking masks. Three variants were trained: one on virtual Duckiematrix data, one on solely physical data, and one on a merged dataset. All models were evaluated qualitatively on the physically collected data (Figure \ref{fig:sample_masks}). While all models segmented accurately in regions close to the camera, the model trained exclusively on virtual data struggled with classification accuracy at a distance.
 
 \begin{figure}[H]
     \centering
@@ -21,8 +14,9 @@ Samples are shown in Figure \ref{fig:sample_masks}. All models generally segment
     \label{fig:sample_masks}
 \end{figure}
 
-The second ablation we did was regarding the policy network. For all experiments we used the multi-head model depicted in Figure \ref{fig:multipleHeads}. We again trained three variants using virtual data, physical data or both and 
-utilized the corresponding YOLO26n model, trained in the first ablation, for each. Subsequently we evaluated their ability to predict the wheel velocities of the physical data. Results are shown in Figure \ref{fig:perf_transfer}
+The second ablation addressed the policy network. For all experiments, we used the multi-head architecture depicted in Figure \ref{fig:multipleHeads}. We trained three variants using virtual, physical, or mixed data, utilizing the corresponding segmentation model from the first ablation for each. We then evaluated their ability to predict the left and right wheel velocities of the physical test data using Mean Absolute Error (MAE), as shown in Figure \ref{fig:perf_transfer}. The model trained on virtual data consistently overestimates wheel velocities, while the mixed-data model achieves performance comparable to the model trained solely on physical data.
+
+In summary, data from Duckiematrix did not degrade performance, but it also did not yield a significant improvement. Relying purely on simulated data did not prove to be a viable strategy for achieving real-life performance. We hypothesize that this is primarily due to an implementation discrepancy. Despite taking precautions to ensure data collection settings, such as the robot's overall angular and linear velocity, remained consistent across virtual and physical setups, we observed that velocity targets were consistently higher in the virtual dataset. Furthermore, predicting raw actuator-specific values like wheel velocities may be suboptimal. An alternative approach would be to predict abstract actions pre-mapped to velocity values, similar to the method in Section \ref{subsec:class_strat}. By coupling this with the segmentation model, the policy network would be more effectively isolated from the environment, potentially facilitating more successful Sim2Real transfer.
 
 \begin{figure}[H]
     \centering

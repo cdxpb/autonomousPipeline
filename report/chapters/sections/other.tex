@@ -9,7 +9,8 @@ The intent was provided to the fully-connected layers as a one-hot encoded vecto
 We hypothesize that the approach likely failed because the model used complete frames as input. It was therefore required to learn both relevant input features and the control policy simultaneously, which is a difficult task when data is limited.
 Additionally, we believe that the conditioning method was too weak to give the model a sufficient learning signal.
 
-\subsection{Classification} 
+\subsection{Classification}
+\label{subsec:class_strat}
 As described in section \ref{sec:datacollection}, we utilized discrete control signals during the data collection phase. Inspired by this, we attempted to train the model to accurately predict appropriate actions given the current input frame. 
 The output layer therefore consisted of 3 neurons, referring to the actions: W = "straight", W + A = "left turn" and W + D = "right turn". We tried this in combination with the multiple head architecture from Section \ref{subsec:mh} and 
 observed that the model was able to control the Duckiebot, but also demonstrated a highly non-smooth and zigzagy driving style. For this reason we decided not to pursue the approach any further.
