@@ -80,6 +80,30 @@ We tried this in combination with the multible head architecture from section \r
 We observed, that the model is able to control the Duckiebot, but also shows a highly non-smooth and zigzagy driving style. (\textcolor{red}{link to a video?})
 We therefore decided not to pursue this approach any further.
 
+\section*{VLM results}
+\label{sec:vlmresults}
+
+\begin{table}[t]
+\centering
+\caption{F1 scores for the evaluated approaches.}
+\label{tab:classification_results}
+\small
+\begin{tabular}{lccccc}
+\toprule
+Metric & Zero-shot & Few-shot & SmolVLM2 & SmolVLM2 & CNN \\
+ & Photo & Photo & Mask & Photo & Mask \\
+\midrule
+Junction        & 0.681 & 0.719 & \textbf{1.000} & 0.970 & 0.836 \\
+Left Open       & 0.720 & 0.417 & 0.923 & \textbf{1.000} & 0.720 \\
+Straight Open   & 0.222 & 0.000 & \textbf{1.000} & \textbf{1.000} & 0.933 \\
+Right Open      & 0.250 & 0.000 & \textbf{1.000} & \textbf{1.000} & 0.609 \\
+Exit Cleared    & 0.000 & 0.000 & 0.945 & \textbf{0.963} & 0.612 \\
+\midrule
+Macro F1        & 0.375 & 0.227 & 0.974 & \textbf{0.987} & 0.742 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
 \newpage
 \section*{Contributions}
 \textbf{Elia}:
