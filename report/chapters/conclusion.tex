@@ -1,7 +1,5 @@
-\chapter{Conclusion and Future Work}
+\chapter{Conclusion}
 \label{chapter:conclusion}
 
-Future work: With our learning based approach, we provide robust models, that can control the Duckiebot relyable. 
-However, we did not incorperate street lights and pedestrains yet. Also, a fully autonomous car should also be able to navigate through the Duckietown by itself.
-To achieve this, a high-level planner like A* or the continous version Anytime A* \textcolor{red}{(refence!!)} is needed to get the high level commands. 
-Another way to get these is \textcolor{red}{the VLM approach of @Pankaj...} We leave these challenges as future work. 
+In conclusion, we demonstrate that our Conditional Imitation Learning models are able to navigate robustly through Duckietown while following commands provided by our VLM-based planner.
+Through our experiments we find that both MH and FiLM based CIL models are able to produce good driving policies and that the data sampling strategy matters. We believe our pipeline is a strong foundation which can be extended to handle more complex scenarios and tasks in Duckietown.
