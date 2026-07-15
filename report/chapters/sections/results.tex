@@ -5,7 +5,7 @@ The exact task definitions can be observed in fig. \ref{fig:tasks}.
 We have tasks that test each intent in isolation and also do a long run to test long term stability. 
 For each task, we test our model five times in each direction of travel and report how often the model succeeds. 
 The results can be viewed in table \ref{tab:results}. 
-We observe that in general, both architectures are able to control our bot relyable, but have some specific weaknesses or biases. 
+We observe that in general, both architectures are able to control our bot reliably, but have some specific weaknesses or biases. 
 For example the MH architecture sometimes fails on the isolated intent tasks, especially on left turns at intersections, 
 but is more robust at the long-term experiment, because it is able to recover from slight errors. 
 FiLM on the other hand is basically perfect on the isolated intent tasks (not as accurate on straight intent), but surprisingly is not as robust on the long term task. 
