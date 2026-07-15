@@ -9,7 +9,7 @@ Because the provided odometry algorithms rely on correct wheel information we we
 Another problem we encountered was in the Computer Vision LX. We were supposed to find lower- and upper-bounds of HSV values by hand to correctly segment lanes in the images that are recorded by the bot. 
 However, we were not able to find good values that are \textbf{robust under various lighting conditions}. 
 As a consequence, the lane following module did not work well.
-In this report we address these challenges by using \textbf{conditional imitation learning} (CIL) on a \textbf{segmented image}. 
+In this report we address these challenges by using a two stage pipeline: first \textbf{segmenting input frames} before subsequently doing \textbf{conditional imitation learning} (CIL). 
 We find that this pipeline enables reliable control of our Duckiebot. 
 In addition to that, we provide a high-level planner which parses simple text instructions into a plan (a queue of maneuvers). 
 A finite-state machine (FSM) based behavior planner, guided by a fine-tuned Vision Language Model (VLM), steps through the queue to produce the intent needed to condition our CIL controller.
