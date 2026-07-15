@@ -1,8 +1,8 @@
 \section{Data Collection}
 \label{sec:datacollection}
 
-To collect the dataset, we built a custom data collection node with a keyboard-controlled UI. 
+To collect the imitation learning dataset, we built a custom data collection node with a keyboard-controlled UI. 
 The keys 'w', 'a', 's', 'd' drive the bot: 'w'/'s' set forward/backward velocity, and holding 'a' or 'd' adds an angular-velocity offset $\omega_a$ or $\omega_d$ to steer left or right; 
 these offsets and the base velocities are hyperparameters, tunable live from the UI. 
 The keys 'i', 'j', 'l', 'k' set the current intent to straight, left, right, or lane-following at intersections. 
-For each frame we log the image $f_t$, wheel velocities $v_t = [v_t^l, v_t^r]^T$, the intent $c_t$, and the currently pressed keys, giving 10809 datapoints from about 20 minutes of driving.
+For each frame we log the image $f_t$, wheel velocities $v_t = [v_t^l, v_t^r]^T$, the intent $c_t$, and the currently pressed keys, producing 10809 datapoints from about 20 minutes of driving.

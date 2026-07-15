@@ -6,4 +6,4 @@ We use Adam as an optimizer.
 Since the intents are not equally distributed in the dataset ('lane following' $\approx 73 \%$, 'left' $\approx 11 \%$, 'straight' $\approx 10 \%$, 'right' $\approx 6 \%$), we oversample the 'left', 'right', and 'straight' intents. 
 We define a sampling strategy as an array of percentages with the order $[\text{lane following}, \text{ straight}, \text{ left}, \text{ right}]$. 
 For our first baseline approach, we use the sampling strategy $[40, 20, 20, 20]$.  
-We observed that this detail is crucial to get a successful model. In the end, we use the model with the lowest validation loss.
+We use the model with the lowest validation loss.

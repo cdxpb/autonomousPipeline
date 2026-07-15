@@ -2,15 +2,12 @@
 \label{sec:inference_optim}
 
 The pipeline runs as four ROS nodes, all subscribing to \texttt{camera\_node/image/compressed}.
-
 \textbf{Data collection} splits into two nodes. 
 A teleoperation UI publishes \texttt{Twist2DStamped} on \texttt{car\_cmd\_switch\_node/cmd} off a constant 10\,Hz timer.
 Duckietown's kinematics node converts $v$/$\omega$ into per-wheel velocities on \texttt{wheels\_driver\_node/wheels\_cmd}. 
 A logger node time-syncs the camera and wheel-velocity topics (0.5\,s slop) and writes one row per pair while recording, matching Section~\ref{sec:datacollection}.
-
 The \textbf{CIL inference node} crops each frame, segments it with YOLO, resizes and colorizes the mask, and feeds it with the one-hot intent into CIL (MH or FiLM, Section~\ref{sec:cil}), loaded once at startup. 
 Publishing is coupled to inference: a \texttt{WheelsCmdStamped} goes out only once a frame is processed, capped at 12\,FPS. 
 If the gap since the last publish exceeds 2$\times$ that interval we log a warning. The wheels driver holds the last command until a new one arrives. Intent normally comes from \texttt{data\_collector/intent}, the topic the teleoperation node publishes to.
-
 The \textbf{VLM inference node} (Section~\ref{sec:vlm}) adds a thread running the FSM and oracle on top of the CIL node, reusing its segmentation output so YOLO only runs once per frame. 
 Each cycle the FSM queries the oracle, updates its state, and overwrites the intent, which the controller picks up on the next frame.

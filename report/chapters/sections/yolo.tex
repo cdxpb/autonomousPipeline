@@ -2,8 +2,8 @@
 \label{sec:yolo}
 
 We trained a YOLO26 \cite{jocher2026ultralyticsyolo26unifiedrealtime} semantic segmentation model by using the ultralytics python library. We used the nano variant which has 1.6M parameters.
-Concretely we train the model to predict 3 semantic classes: the white lane markings, the dashed yellow lane markings and the red markings.
-To train the YOLO model we recorded a dataset of around 5.000 images while driving around Duckietown and then generated high-quality masks with the SAM3 \cite{carion2026sam} model from Meta.
+Concretely, we train the model to predict 3 semantic classes: the white lane markings, the dashed yellow lane markings and the red markings.
+To train the YOLO model we generated high-quality masks with SAM3 \cite{carion2026sam} from our imitation learning dataset.
 These masks serve as the ground-truth labels when training the YOLO model.
 During training we used the pretrained yolo26n-sem checkpoint from the ultralytics library with default settings, only adjusting the input image size, and trained for 5 epochs.
 The resulting YOLO model produces very good segmentations of the lane markings in Duckietown.
