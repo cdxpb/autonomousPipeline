@@ -6,5 +6,5 @@ Given a feature map $x_{\text{in}}$ a FiLM layer learns a shift coefficient $\be
 A convolutional layer is augmented at the channel dimension, each channel of the output feature map is scaled and shifted with a separate learnable shift and scale coefficient. A linear layer only needs one shift and scale pair.
 We implement a shared encoder that takes as input the one-hot encoded intent and projects to a 64-dimensional vector. Then for each convolutional and linear layer that is augmented with FiLM we have a seperate projection that outputs the correct dimensionality.
 For all FiLM layers we initialize $\gamma = 1$ and $\beta = 0$.
-A detailed overview of the FiLM-conditioned neural network can be found in figure \ref{fig:FiLM}.
+A detailed overview of the FiLM-conditioned neural network can be found in Figure \ref{fig:FiLM}.
 
