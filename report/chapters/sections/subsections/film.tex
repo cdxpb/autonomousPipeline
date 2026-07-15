@@ -1,7 +1,8 @@
 \subsection{Feature-wise Linear Modulation (FiLM)}
 \label{subsec:film}
 
-The second model we train also uses a convolutional backbone with subsequent linear layers to predict the wheel velocities given a segmented input frame, but it relies on the FiLM \cite{Perez2017FiLMVR} conditioning mechanism for the high-level commands.
+The second model we train also uses a convolutional backbone with subsequent linear layers to predict the wheel velocities given a segmented input frame.
+It relies on the FiLM \cite{Perez2017FiLMVR} conditioning mechanism for the high-level commands.
 Given a feature map $x_{\text{in}}$ a FiLM layer learns a shift coefficient $\beta$ and scale coefficient $\gamma$ that augment the input $x_{\text{out}} = \gamma \odot x_{\text{in}} + \beta$.
 For a convolutional layer this is done at the channel dimension.
 We implement an encoder that takes as input the one-hot encoded intent and projects to a shared embedding.
