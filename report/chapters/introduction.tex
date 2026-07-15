@@ -2,13 +2,14 @@
 \label{chapter:introduction}
 
 Duckietown is an educational and research platform that enables the exploration of autonomous driving concepts using a simple and low-cost environment. 
-It also provides Learning Experiences (LX) in which we learned about basic concepts of self-driving cars. 
-However, a number of problems arose during the LX's that made it difficult or even impossible to control the Duckiebot reliably.
+It also provides Learning Experiences (LXs) in which we learned about basic concepts of self-driving cars. 
+However, a number of problems arose during the LXs that made it difficult or even impossible to control the Duckiebot reliably.
 Most important, our Duckiebot shows \textbf{strong drift}, likely due to hardware issues. 
 Because the provided odometry algorithms rely on correct wheel information we were not able to control our Duckiebot with a PID controller.
 Another problem we encountered was in the Computer Vision LX. We were supposed to find lower- and upper-bounds of HSV values by hand to correctly segment lanes in the images that are recorded by the bot. 
 However, we were not able to find good values that are \textbf{robust under various lighting conditions}. 
 As a consequence, the lane following module did not work well.
-In this report we address these challenges by using \textbf{conditional imitation learning} on a \textbf{segmented image}. 
+In this report we address these challenges by using \textbf{conditional imitation learning} (CIL) on a \textbf{segmented image}. 
 We find that this pipeline enables reliable control of our Duckiebot. 
-In addition to that, we provide a low-level VLM-based planner, that produces the needed intent, based on the current frame and a high-level plan, induced as a simple prompt. 
+In addition to that, we provide a high-level planner which parses simple text instructions into a plan (a queue of maneuvers). 
+A finite-state machine (FSM) based behavior planner, guided by a fine-tuned Vision Language Model (VLM), steps through the queue to produce the intent needed to condition our CIL controller.

@@ -1,10 +1,8 @@
 \section{Data Collection}
 \label{sec:datacollection}
 
-To collect the dataset, we implemented a custom data collection node (\textcolor{red}{picture of UI}). 
-We controlled the Duckiebot with the keys 'w', 'a', 'd' where 'w' is straight 'a' is left and 'd' is right. 
-Pressing 'a' and 'd' in addition to 'w' causes the left or the right wheel to spin faster by a factor of $\omega_a$ or $\omega_d$ to handle left and right turns. (\textcolor{red}{@Pankaj: correct the wording if this is wrong...})
-These factors $\omega_a$ or $\omega_d$ and the overall velocity are hyperparameters that should be tuned using the data collection UI (figure...). 
-The current intent is set using the keys 'i' = straight at intersections, 'j' = left at intersections, 'l' = right at intersections and 'k' = lane following when not at intersection. 
-During collection, we save the current frame $f_t$, the current wheel velocities for each wheel $v_t = [v_t^l, v_t^r]^T$, the intent $c_t$ and the current pressed steering keys ('w', 'a', 'd'). 
-In total, we collected 10809 datapoints in about 20 minutes of continuous driving.
+To collect the dataset, we built a custom data collection node with a keyboard-controlled UI (\textcolor{red}{picture of UI}). 
+The keys 'w', 'a', 's', 'd' drive the bot: 'w'/'s' set forward/backward velocity, and holding 'a' or 'd' adds an angular-velocity offset $\omega_a$ or $\omega_d$ to steer left or right; 
+these offsets and the base velocities are hyperparameters, tunable live from the UI (figure...). 
+The keys 'i', 'j', 'l', 'k' set the current intent to straight, left, right, or lane-following at intersections. 
+For each frame we log the image $f_t$, wheel velocities $v_t = [v_t^l, v_t^r]^T$, the intent $c_t$, and the currently pressed keys, giving 10809 datapoints from about 20 minutes of driving.
