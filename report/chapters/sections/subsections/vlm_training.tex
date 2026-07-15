@@ -3,6 +3,6 @@
 
 Instead of prompting, we freeze the SmolVLM2 vision backbone and train a small multi-label MLP head on top of its pooled features to predict the five targets directly: junction, left/straight/right open, and exit-cleared.
 We split the image into left/center/right thirds and pool each separately before concatenating, which we found necessary for the model to localize left/right turns rather than only detect a junction.
-We compare two input types: the cropped camera image (\textit{Photo}) and the cropped, colorized segmentation mask (\textit{Mask}), and two backbone sizes (SmolVLM2-256M and 500M).
+We compare two input types: the cropped camera image (\textit{Photo}) and the cropped, colorized segmentation mask (\textit{Mask}) on SmolVLM2-256M.
 Since our label distribution is imbalanced, we oversample minority-class frames with augmented copies (flip, jitter) and additionally weight the loss per class.
 We split by episode rather than by frame to avoid near-duplicate frames leaking between train and validation, and train with Adam and early stopping on validation macro-F1.
