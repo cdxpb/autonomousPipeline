@@ -1,0 +1,4 @@
+\subsection{CNN Baseline}
+\label{subsec:vlm_cnn_baseline}
+
+To check whether the VLM backbone is doing useful work, or whether the segmentation mask alone already contains enough signal, we train a small CNN (four conv layers, the same trunk used by our PilotNet models) with the same multi-label head, labels, split, and oversampling as above, directly on the raw segmentation mask.

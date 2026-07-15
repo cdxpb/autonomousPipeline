@@ -1,3 +1,18 @@
-\section{VLM-based policy coordination}
+\section{VLM-Guided Behavior Planning}
+\label{sec:vlm}
 
-@Pankaj 
+The intent $c_t$ used to condition our controller (Section~\ref{sec:cil}) is produced by a behavior planner.
+A user gives a single text instruction (e.g. ``take the second left, then a right and stop''), which we parse into a plan: a queue of maneuvers to execute in order.
+A finite-state machine (FSM, Figure~\ref{fig:fsm}) consumes this queue one maneuver at a time.
+While lane-following it asks a VLM, once per frame, whether a junction is ahead and whether the target direction is open; once this is confirmed for a few consecutive frames it emits the corresponding intent, waits for the VLM to confirm the junction has been cleared, then advances to the next maneuver.
+The VLM is a visual oracle: a per-frame classifier that grounds the FSM's transitions in the current image.
+
+We initially queried a general-purpose VLM zero-shot, but found this too unreliable to drive the FSM, particularly on the exit-cleared question (Appendix~\ref{appendix:vlmresults}).
+We therefore fine-tune a classification head on top of a frozen SmolVLM2 \textcolor{red}{cite SmolVLM2} vision backbone to answer the FSM's two questions directly, and compare it against zero-shot, few-shot, and a CNN-only baseline in Appendix~\ref{appendix:vlmresults}.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.85\linewidth]{fsm_diagram.png}
+    \caption{The navigation FSM. Each state emits an intent; transitions are driven by the oracle's answer to the FSM's \textit{approach} or \textit{exit} query.}
+    \label{fig:fsm}
+\end{figure}

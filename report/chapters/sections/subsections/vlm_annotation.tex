@@ -1,0 +1,6 @@
+\subsection{Annotation}
+\label{subsec:vlm_annotation}
+
+We label training data for the oracle with a small web annotation tool built for this purpose.
+For each frame, an annotator marks it either as \textit{approach} (is a junction visible, and which of left/straight/right are open) or \textit{exit} (has the robot cleared the junction), or skips it.
+Labels are saved as one JSON entry per frame, keyed by filename.

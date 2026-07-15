@@ -1,6 +1,17 @@
 \section{VLM results}
 \label{appendix:vlmresults}
 
+\input{chapters/sections/subsections/vlm_annotation}
+
+\input{chapters/sections/subsections/vlm_prompting}
+
+\input{chapters/sections/subsections/vlm_training}
+
+\input{chapters/sections/subsections/vlm_cnn_baseline}
+
+\subsection{Comparison}
+\label{subsec:vlm_comparison}
+
 \begin{table}[!ht]
 \centering
 \caption{F1 scores for the evaluated approaches.}
@@ -21,3 +32,9 @@ Macro F1        & 0.375 & 0.227 & 0.974 & \textbf{0.987} & 0.742 \\
 \bottomrule
 \end{tabular}
 \end{table}
+
+Zero-shot prompting fails almost completely on exit-cleared (F1 = 0): the question needs a notion of the robot's recent trajectory that a single frame can't provide.
+Few-shot exemplars make this worse rather than better, since a handful of in-context images add latency without giving the model a way to localize itself relative to the junction.
+Fine-tuning closes this gap: both SmolVLM2 variants clear 0.97 macro F1, with Photo slightly ahead of Mask.
+The CNN-Mask baseline, trained on identical labels and input, only reaches 0.742, so the pretrained VLM features are carrying real signal beyond what the mask alone gives a from-scratch CNN.
+Despite its slightly lower F1, we deploy the SmolVLM2 Mask head for live inference. The segmentation mask is restricted to our fixed set of classes by construction, while the raw photo can go out-of-distribution whenever objects not seen during training appear in frame.

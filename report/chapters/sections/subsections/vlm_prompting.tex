@@ -1,0 +1,12 @@
+\subsection{Prompting}
+\label{subsec:vlm_prompting}
+
+Our zero-shot and few-shot baselines query SmolVLM2 with a fixed, hand-written prompt per question and read off the answer via logit comparison over a closed vocabulary:
+
+\begin{quote}
+\textit{Approach:} ``Is there a road junction ahead, and is \{direction\} an open path from it? Answer yes (junction, \{direction\} open), pass (junction, \{direction\} blocked), or no (no junction). One word only.''
+
+\textit{Exit:} ``Has the robot cleared the junction and returned to normal lane-following? Answer yes or no. One word only.''
+\end{quote}
+
+For few-shot, we prepend three labeled approach exemplars (one yes, one pass, one no) and two exit exemplars (one yes, one no) as prior turns before the real query.
