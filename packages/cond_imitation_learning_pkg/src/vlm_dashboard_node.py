@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-VLM-enabled CIL dashboard. Adds a VLM planner panel on top of MacDashboardUI that
+VLM-enabled CIL dashboard. Adds a VLM planner panel on top of RemoteDashboardUI that
 drives the intent from a natural-language instruction. Launched via run_dashboard_vlm.sh.
 """
 import sys
@@ -16,7 +16,7 @@ from PyQt5.QtWidgets import (QLabel, QVBoxLayout, QHBoxLayout, QGroupBox,
 from PyQt5.QtCore import pyqtSignal, QThread
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from mac_dashboard_node import MacDashboardUI
+from remote_dashboard_node import RemoteDashboardUI
 from vlm_planner import NavFSM, Config, parse_instruction, VLMOracle
 
 
@@ -109,7 +109,7 @@ class VLMWorker(QThread):
             rate.sleep()
 
 
-class VLMMacDashboardUI(MacDashboardUI):
+class VLMRemoteDashboardUI(RemoteDashboardUI):
     def __init__(self):
         super().__init__()
         self.vlm_worker = None
@@ -250,6 +250,6 @@ class VLMMacDashboardUI(MacDashboardUI):
 if __name__ == '__main__':
     from PyQt5.QtWidgets import QApplication
     app = QApplication(sys.argv)
-    driver_ui = VLMMacDashboardUI()
+    driver_ui = VLMRemoteDashboardUI()
     driver_ui.show()
     sys.exit(app.exec_())

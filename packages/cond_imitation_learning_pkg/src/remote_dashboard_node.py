@@ -23,7 +23,7 @@ from std_msgs.msg import String
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 
-class MacDashboardUI(QMainWindow):
+class RemoteDashboardUI(QMainWindow):
     # Signals to safely update UI from ROS thread
     telemetry_img_signal = pyqtSignal(np.ndarray, np.ndarray)
     telemetry_state_signal = pyqtSignal(float, float, str, str)
@@ -186,6 +186,6 @@ class MacDashboardUI(QMainWindow):
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
-    driver_ui = MacDashboardUI()
+    driver_ui = RemoteDashboardUI()
     driver_ui.show()
     sys.exit(app.exec_())

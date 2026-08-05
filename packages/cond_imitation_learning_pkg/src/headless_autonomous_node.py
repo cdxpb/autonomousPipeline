@@ -201,15 +201,8 @@ class HeadlessAutonomousNode:
             elif self.pilotnet_backend.lower() == "onnx":
                 rospy.logwarn(f"ONNX not found at {onnx_path}, falling back to PyTorch")
             rospy.loginfo(f"Loading PilotNet PyTorch (Approach {self.approach}) on {self.device}")
-            if self.approach == 7:
-                from pilotnet_FiLM import ConditionalPilotNetFiLM
-                self.pt_model = ConditionalPilotNetFiLM().to(self.device)
-            elif self.approach == 5:
-                if self.model_set == "full":
-                    from pilotnet_regNheadv2 import ConditionalPilotNet
-                else:
-                    from pilotnet_reg_smaller import ConditionalPilotNet
-                self.pt_model = ConditionalPilotNet().to(self.device)
+            from models import get_pilotnet_model
+            self.pt_model = get_pilotnet_model(self.approach, self.model_set, self.skip_segmentation).to(self.device)
             self.pt_model.load_state_dict(torch.load(pt_path, map_location=self.device, weights_only=False))
             self.pt_model.eval()
 

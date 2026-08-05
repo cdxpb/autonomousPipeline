@@ -22,18 +22,15 @@ from duckietown_msgs.msg import Twist2DStamped, WheelsCmdStamped
 from sensor_msgs.msg import CompressedImage
 from std_msgs.msg import String
 
-# PyQt5 UI Components
 from PyQt5.QtWidgets import (QApplication, QLabel, QMainWindow, QVBoxLayout, 
                              QHBoxLayout, QWidget, QGroupBox, QPushButton, QComboBox,
                              QCheckBox, QLineEdit)
 from PyQt5.QtGui import QImage, QPixmap
 from PyQt5.QtCore import Qt, pyqtSignal, QObject
 
-# DRY Imports from your package
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from utils import crop_image, get_eval_transforms, INTENT_MAP, CROP_TOP_ROWS
 
-# -- Backend libraries --
 try:
     import tensorrt as trt
     import pycuda.driver as cuda
@@ -169,7 +166,6 @@ class AutonomousDriverUI(QMainWindow):
         main_widget = QWidget(self)
         layout = QVBoxLayout()
 
-        # --- TOP CONTROL BAR ---
         control_group = QGroupBox("Execution Control")
         control_layout = QHBoxLayout()
         
@@ -194,7 +190,6 @@ class AutonomousDriverUI(QMainWindow):
         control_group.setLayout(control_layout)
         layout.addWidget(control_group)
 
-        # --- SEGMENTATION & PERFORMANCE BAR ---
         perf_group = QGroupBox("Segmentation Offload & Performance")
         perf_layout = QHBoxLayout()
 
@@ -219,7 +214,6 @@ class AutonomousDriverUI(QMainWindow):
         perf_group.setLayout(perf_layout)
         layout.addWidget(perf_group)
 
-        # --- CAMERA DISPLAYS ---
         img_layout = QHBoxLayout()
         
         self.live_label = QLabel(self)
@@ -238,7 +232,6 @@ class AutonomousDriverUI(QMainWindow):
         img_layout.addWidget(self.model_label)
         layout.addLayout(img_layout)
 
-        # --- TELEMETRY GRAPHICS ---
         telemetry_group = QGroupBox("Network Predictions & State")
         telemetry_layout = QHBoxLayout()
 
@@ -253,7 +246,6 @@ class AutonomousDriverUI(QMainWindow):
         telemetry_group.setLayout(telemetry_layout)
         layout.addWidget(telemetry_group)
 
-        # --- INTENT INJECTION PANEL ---
         intent_group = QGroupBox("CIL Executive Intent Control")
         intent_layout = QHBoxLayout()
 
@@ -318,7 +310,6 @@ class AutonomousDriverUI(QMainWindow):
         else: # 3: stop
             return 0.0, 0.0
 
-    # -- State control --
     def start_autonomous(self):
         backend = self.backend_combo.currentText()
         rospy.loginfo(f"Loading Model for Backend: {backend}...")
@@ -326,24 +317,8 @@ class AutonomousDriverUI(QMainWindow):
         try:
             if backend == "PyTorch":
                 # Assumes you have a TorchScript exported model (.pt) or you can drop your PilotNet class here
-                if self.approach == 3:
-                    from pilotnet_regNhead import ConditionalPilotNet
-                    self.pt_model = ConditionalPilotNet().to(self.device)
-                elif self.approach == 4:
-                    from pilotnet_regNCIL_temporal import ConditionalPilotNet
-                    self.pt_model = ConditionalPilotNet(num_frames=3).to(self.device)
-                elif self.approach == 5:
-                    from pilotnet_regNheadv2 import ConditionalPilotNet
-                    self.pt_model = ConditionalPilotNet().to(self.device)
-                elif self.approach == 6:
-                    from pilotnet_classNhead import ConditionalPilotNet
-                    self.pt_model = ConditionalPilotNet().to(self.device)
-                elif self.approach == 7:
-                    from pilotnet_FiLM import ConditionalPilotNetFiLM
-                    self.pt_model = ConditionalPilotNetFiLM().to(self.device)
-                else:
-                    from pilotnet import ConditionalPilotNet
-                    self.pt_model = ConditionalPilotNet(in_channels=3 if self.skip_segmentation else 1).to(self.device)
+                from models import get_pilotnet_model
+                self.pt_model = get_pilotnet_model(self.approach, "full", self.skip_segmentation).to(self.device)
                 self.pt_model.load_state_dict(torch.load(f"{self.model_path}.pt", map_location=self.device))
                 self.pt_model.eval()
 
