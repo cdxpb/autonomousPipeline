@@ -1,5 +1,13 @@
 # Autonomous Pipeline
 
+<div align="center">
+  <video src="website/assets/vlmCompiledCompressed.mp4" width="800" controls autoplay loop muted></video>
+  <br>
+  <em>Given text instruction as a high level plan, we parse a queue of maneuvers. Based on the queue, at each frame we prompt our VLM and get back an intent. Based on the predicted intent and the segmentation mask of our current frame, the Conditional Imitation Learning controller predicts wheel velocities.</em>
+</div>
+
+<br>
+
 ROS pipeline for Conditional Imitation Learning (CIL) and Vision-Language Model (VLM) navigation on Duckietown.
 
 This repository includes data collection, a PyQt5 remote dashboard, and autonomous driving using PilotNet and YOLO semantic segmentation. Models are trained in PyTorch, exported to ONNX, and run via TensorRT on the Jetson Nano.

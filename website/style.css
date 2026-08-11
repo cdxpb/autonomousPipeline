@@ -1,0 +1,202 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+:root {
+    --text-color: #333333;
+    --bg-color: #ffffff;
+    --accent-color: #0066cc;
+    --border-color: #eaeaea;
+    --caption-color: #666666;
+    --code-bg: #f8f9fa;
+    
+    /* Spacing variables for consistency */
+    --section-gap: 60px;
+    --element-gap: 24px;
+}
+
+body {
+    margin: 0;
+    padding: 0;
+    background-color: var(--bg-color);
+    color: var(--text-color);
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    line-height: 1.7;
+    font-size: 17px;
+    -webkit-font-smoothing: antialiased;
+}
+
+.container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: var(--section-gap) 20px;
+}
+
+header {
+    text-align: center;
+    margin-bottom: var(--section-gap);
+}
+
+h1 {
+    font-size: 2.8em;
+    font-weight: 700;
+    line-height: 1.2;
+    margin-bottom: var(--element-gap);
+    letter-spacing: -0.03em;
+}
+
+h2 {
+    font-size: 1.8em;
+    font-weight: 600;
+    margin-top: var(--section-gap);
+    margin-bottom: var(--element-gap);
+    border-bottom: 2px solid var(--border-color);
+    padding-bottom: 10px;
+    letter-spacing: -0.02em;
+}
+
+h3 {
+    font-size: 1.3em;
+    font-weight: 600;
+    margin-top: calc(var(--section-gap) * 0.75);
+    margin-bottom: 15px;
+}
+
+p {
+    margin-top: 0;
+    margin-bottom: var(--element-gap);
+    text-align: justify;
+}
+
+/* Links */
+.links {
+    margin: var(--element-gap) 0;
+    display: flex;
+    justify-content: center;
+    gap: 15px;
+}
+
+.links a {
+    display: inline-block;
+    padding: 8px 20px;
+    background-color: var(--text-color);
+    color: white;
+    text-decoration: none;
+    border-radius: 20px;
+    font-weight: 500;
+    font-size: 0.9em;
+    transition: background-color 0.2s ease;
+}
+
+.links a:hover {
+    background-color: var(--accent-color);
+}
+
+/* Video */
+.video-container {
+    margin: var(--section-gap) 0;
+    text-align: center;
+}
+
+.video-container video {
+    width: 100%;
+    border-radius: 8px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+    margin-bottom: 15px;
+}
+
+.caption {
+    font-size: 0.95em;
+    color: var(--caption-color);
+    margin-top: 0;
+    margin-bottom: var(--element-gap);
+    text-align: justify;
+}
+
+/* Figures */
+.figure {
+    margin: var(--element-gap) 0;
+    text-align: center;
+}
+
+.figure img {
+    max-width: 100%;
+    height: auto;
+    border-radius: 8px;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.06);
+    margin-bottom: 15px;
+}
+
+/* Table */
+table {
+    width: max-content;
+    max-width: 100%;
+    border-collapse: collapse;
+    margin: var(--element-gap) auto;
+    font-size: 0.9em;
+    border-left: 2px solid var(--text-color);
+    border-right: 2px solid var(--text-color);
+}
+
+table caption {
+    margin-bottom: 10px;
+    text-align: left;
+    font-size: 0.95em;
+    color: var(--caption-color);
+}
+
+th, td {
+    border: 1px solid var(--border-color);
+    padding: 8px 12px;
+    text-align: center;
+}
+
+th {
+    font-weight: 600;
+    background-color: var(--code-bg);
+    border-top: 2px solid var(--text-color);
+    border-bottom: 2px solid var(--text-color);
+}
+
+td:first-child {
+    text-align: left;
+    font-weight: 500;
+}
+
+tr:last-child td {
+    border-bottom: 2px solid var(--text-color);
+}
+
+/* Side-by-side Layout */
+.side-by-side {
+    display: flex;
+    align-items: flex-start;
+    gap: 40px;
+    margin: var(--element-gap) 0;
+}
+
+.side-by-side.align-center {
+    align-items: center;
+}
+
+.side-by-side .figure, .side-by-side .table-container {
+    flex: 1;
+    margin: 0;
+}
+
+.side-by-side.match-height {
+    align-items: stretch;
+}
+
+.side-by-side.match-height .figure:first-child {
+    flex: 1.199; /* Aspect ratio of datacollectionui */
+}
+
+.side-by-side.match-height .figure:last-child {
+    flex: 1.840; /* Aspect ratio of data_annotation */
+}
+
+.side-by-side.match-height .figure img {
+    width: 100%;
+    height: auto;
+    display: block;
+    margin: 0;
+}

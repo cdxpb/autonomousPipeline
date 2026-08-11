@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Conditional Imitation Learning with VLM-Guided Behavior Planning</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Conditional Imitation Learning with VLM-Guided Behavior Planning for Robust Control</h1>
+            
+            <div class="video-container">
+                <video src="assets/vlmCompiledCompressed.mp4" controls autoplay loop muted></video>
+                <p class="caption">
+                    <strong>Autonomous Pipeline:</strong> Given a text instruction as a high level plan, we parse a queue of maneuvers. Based on the queue, at each frame we prompt our VLM and get back an intent. Based on the predicted intent and the segmentation mask of our current frame, the Conditional Imitation Learning controller predicts wheel velocities.
+                </p>
+            </div>
+        </header>
+
+        <section class="abstract">
+            <h2>Abstract</h2>
+            <p>
+                While implementing Duckietown Learning Experiences, we experienced the limitations of classical modular pipelines firsthand. We overcome these limitations by training conditional imitation learning (CIL) models on segmented images that drive the Duckiebot according to a per-frame intent. This intent is produced by a fine-tuned Vision-Language Model (VLM) guided planner following a high-level plan. With this setup, the bot robustly performs lane-following and turning at intersections, enabling a safe driving experience in Duckietown. <a href="https://github.com/duckietown/autonomousPipeline">The code can be found here.</a>
+            </p>
+        </section>
+
+        <section class="methods">
+            <h2>Method</h2>
+            
+            <p>
+                To overcome hardware drift and lighting issues, we control our Duckiebot using neural networks. We solve ambiguous situations like intersections by conditioning our model on high-level commands or intents. The scene is first summarized into a semantic mask, and a policy network subsequently predicts wheel velocities.
+            </p>
+
+            <div class="figure">
+                <img src="assets/pipeline.webp" alt="Inference Pipeline">
+                <p class="caption"><strong>Figure 1: Inference Pipeline.</strong> The input camera frame is semantically segmented by YOLO, while a VLM oracle observes the frame to guide a Finite-State Machine (FSM). The resulting intent and semantic mask condition a neural network to produce wheel velocities.</p>
+            </div>
+
+            <h3>Data Collection and Annotation</h3>
+            <p>
+                To collect the imitation learning dataset, we built a custom data collection node with a teleoperation UI. We additionally developed a web annotation tool to label the VLM fine-tuning dataset to train the visual oracle.
+            </p>
+            <div class="side-by-side match-height">
+                <div class="figure">
+                    <img src="assets/datacollectionui.webp" alt="Data Collection UI">
+                    <p class="caption"><strong>Figure 2: Data Collection UI.</strong> The teleoperation UI used to gather expert driving trajectories.</p>
+                </div>
+                <div class="figure">
+                    <img src="assets/data_annotation.webp" alt="Data Annotation UI">
+                    <p class="caption"><strong>Figure 3: Data Annotation UI.</strong> Used to label approach and exit states for VLM fine-tuning.</p>
+                </div>
+            </div>
+
+            <h3>Behavior Planning</h3>
+            <div class="figure">
+                <img src="assets/planner_pipeline.webp" alt="Planner Pipeline">
+                <p class="caption"><strong>Figure 4: Planner Architecture.</strong> The VLM processes the raw frame and guides the planner through a queue of maneuvers to output the current intent.</p>
+            </div>
+            <p>
+                A text instruction (e.g. "take the second left") is parsed into a queue of maneuvers. An FSM queries a fine-tuned SmolVLM2 model once per frame to ask whether a junction is ahead and whether the junction has been cleared, acting as a visual oracle to drive state transitions.
+            </p>
+
+            <h3>Conditional Imitation Learning (CIL)</h3>
+            <p>
+                We implemented two distinct conditioning architectures to fuse the visual features with the high-level intent: a Multiple Head (MH) architecture that routes features to intent-specific layers, and a Feature-wise Linear Modulation (FiLM) architecture that dynamically modulates convolutional features based on the intent embedding.
+            </p>
+        </section>
+
+        <section class="results">
+            <h2>Results</h2>
+            
+            <p>
+                We tested the models on isolated intent tasks and long-term stability runs. For isolated tasks, the model runs 5 times in each direction. Model variant <strong>a)</strong> denotes the baseline sampling strategy, while <strong>b)</strong> denotes an adjusted intent-balancing sampling strategy. 
+            </p>
+            
+            <div class="side-by-side align-center">
+                <div class="table-container">
+                    <table>
+                        <caption><strong>Table 1: Success rates for the evaluated CIL tasks.</strong> 5 runs each.</caption>
+                        <thead>
+                            <tr>
+                                <th>Task</th>
+                                <th colspan="2">Multiple Heads</th>
+                                <th colspan="2">FiLM</th>
+                            </tr>
+                            <tr>
+                                <th></th>
+                                <th>a)</th>
+                                <th>b)</th>
+                                <th>a)</th>
+                                <th>b)</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>Semicircle (left/right)</td>
+                                <td>5/4</td>
+                                <td>4/5</td>
+                                <td>5/5</td>
+                                <td>5/5</td>
+                            </tr>
+                            <tr>
+                                <td>Long corner (left/right)</td>
+                                <td>5/5</td>
+                                <td>5/4</td>
+                                <td>5/5</td>
+                                <td>5/5</td>
+                            </tr>
+                            <tr>
+                                <td>Straight at intersection</td>
+                                <td>5/5</td>
+                                <td>5/5</td>
+                                <td>5/5</td>
+                                <td>5/5</td>
+                            </tr>
+                            <tr>
+                                <td>Left turn at intersection</td>
+                                <td>4/2</td>
+                                <td>5/5</td>
+                                <td>5/5</td>
+                                <td>5/5</td>
+                            </tr>
+                            <tr>
+                                <td>Right turn at intersection</td>
+                                <td>5/5</td>
+                                <td>5/5</td>
+                                <td>5/5</td>
+                                <td>5/5</td>
+                            </tr>
+                            <tr>
+                                <td>Long run (Continuous)</td>
+                                <td>5</td>
+                                <td>5</td>
+                                <td>4</td>
+                                <td>5</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="figure">
+                    <img src="assets/8loop.webp" alt="Continuous Long Run Loop">
+                    <p class="caption"><strong>Figure 5: Long Run Task.</strong> The Duckiebot is tasked with continuously driving along a predefined loop to test long-term stability.</p>
+                </div>
+            </div>
+
+            <h3>VLM Oracle Performance</h3>
+            <p>
+                To evaluate the VLM oracle, we compared zero-shot and few-shot prompting against a fine-tuned classification head on SmolVLM2, as well as a CNN baseline.
+            </p>
+            <table>
+                <caption><strong>Table 2: F1 scores for the evaluated VLM approaches.</strong></caption>
+                <thead>
+                    <tr>
+                        <th>Metric</th>
+                        <th>Zero-shot Photo</th>
+                        <th>Few-shot Photo</th>
+                        <th>SmolVLM2 Mask</th>
+                        <th>SmolVLM2 Photo</th>
+                        <th>CNN Mask</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Junction</td>
+                        <td>0.681</td>
+                        <td>0.719</td>
+                        <td>1.000</td>
+                        <td>0.970</td>
+                        <td>0.836</td>
+                    </tr>
+                    <tr>
+                        <td>Left Open</td>
+                        <td>0.720</td>
+                        <td>0.417</td>
+                        <td>0.923</td>
+                        <td>1.000</td>
+                        <td>0.720</td>
+                    </tr>
+                    <tr>
+                        <td>Straight Open</td>
+                        <td>0.222</td>
+                        <td>0.000</td>
+                        <td>1.000</td>
+                        <td>1.000</td>
+                        <td>0.933</td>
+                    </tr>
+                    <tr>
+                        <td>Right Open</td>
+                        <td>0.250</td>
+                        <td>0.000</td>
+                        <td>1.000</td>
+                        <td>1.000</td>
+                        <td>0.609</td>
+                    </tr>
+                    <tr>
+                        <td>Exit Cleared</td>
+                        <td>0.000</td>
+                        <td>0.000</td>
+                        <td>0.945</td>
+                        <td>0.963</td>
+                        <td>0.612</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Macro F1</strong></td>
+                        <td><strong>0.375</strong></td>
+                        <td><strong>0.227</strong></td>
+                        <td><strong>0.974</strong></td>
+                        <td><strong>0.987</strong></td>
+                        <td><strong>0.742</strong></td>
+                    </tr>
+                </tbody>
+            </table>
+            <p>
+                Fine-tuning SmolVLM2 resolves the temporal failures seen in zero-shot prompting. We deployed the SmolVLM2 Mask head for live inference because the segmentation mask restricts out-of-distribution errors from unseen objects.
+            </p>
+        </section>
+    </div>
+</body>
+</html>
