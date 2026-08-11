@@ -1,47 +1,94 @@
-# Template: template-ros
+# Autonomous Pipeline
 
-This template provides a boilerplate repository
-for developing ROS-based software in Duckietown.
+ROS pipeline for Conditional Imitation Learning (CIL) and Vision-Language Model (VLM) navigation on Duckietown.
 
-**NOTE:** If you want to develop software that does not use
-ROS, check out [this template](https://github.com/duckietown/template-basic).
+This repository includes data collection, a PyQt5 remote dashboard, and autonomous driving using PilotNet and YOLO semantic segmentation. Models are trained in PyTorch, exported to ONNX, and run via TensorRT on the Jetson Nano.
 
+## Setup
 
-## How to use it
+The system is split between the robot (Duckiebot) and your remote machine.
 
-### 1. Fork this repository
+### 1. Robot Setup
+Turn on your robot and connect to its network. Note the hostname (e.g. `duckiebot42`).
 
-Use the fork button in the top-right corner of the github page to fork this template repository.
+If you are using the simulator (Duckiematrix), launch the matrix engine and attach to the vehicle:
+```bash
+dts matrix engine run --sandbox --verbose
+dts matrix run --browser --engine hostip
+dts matrix attach golduck map_0/vehicle_0
+```
 
+### 2. Remote Machine Setup (macOS / Linux)
+You need Conda installed.
 
-### 2. Create a new repository
+```bash
+conda env create -f native_env.yml
+conda activate ros_native
 
-Create a new repository on github.com while
-specifying the newly forked template repository as
-a template for your new repository.
+mkdir -p ~/dev/native_ws/src
+cd ~/dev/native_ws/src
+git clone --depth 1 -b daffy https://github.com/duckietown/dt-ros-commons.git
+mv dt-ros-commons/packages/duckietown_msgs .
+rm -rf dt-ros-commons
 
+# Symlink the packages into your workspace
+ln -s /path/to/autonomousPipeline/packages/cond_imitation_learning_pkg cond_imitation_learning_pkg
+ln -s /path/to/autonomousPipeline/packages/data_collector_pkg data_collector_pkg
 
-### 3. Define dependencies
+cd ~/dev/native_ws
+catkin build
+```
 
-List the dependencies in the files `dependencies-apt.txt` and
-`dependencies-py3.txt` (apt packages and pip packages respectively).
+## Usage
 
+### Data Collection
+To collect behavioral cloning data, run the logger and the UI. The data will be saved locally to `~/Desktop/my_dataset/cil_dataset_YYYYMMDD-HHMMSS/`.
 
-### 4. Place your code
+Run these in two separate terminal tabs:
+```bash
+rosrun data_collector_pkg logger_node.py
+rosrun data_collector_pkg ui_node.py
+```
 
-Place your code in the directory `/packages/` of
-your new repository.
+**Controls** (make sure the UI window is focused):
+* W/A/S/D: Drive
+* R: Toggle data logging on/off
+* I/J/L/K: Intents (Straight, Left, Right, Lane Following)
 
+### Autonomous Navigation
+To run the autonomous driving pipeline directly from your remote machine (uses PyTorch by default):
+```bash
+./launch.sh autonomous
+```
 
-### 5. Setup launchers
+For Vision-Language Model (VLM) guided navigation:
+```bash
+./launch.sh dashboard_vlm --port 8000
+```
 
-The directory `/launchers` can contain as many launchers (launching scripts)
-as you want. A default launcher called `default.sh` must always be present.
+To export PyTorch models to ONNX:
+```bash
+python3 packages/cond_imitation_learning_pkg/src/export_model.py --format onnx --approach 7
+```
 
-If you create an executable script (i.e., a file with a valid shebang statement)
-a launcher will be created for it. For example, the script file 
-`/launchers/my-launcher.sh` will be available inside the Docker image as the binary
-`dt-launcher-my-launcher`.
+## Jetson Deployment (TensorRT)
 
-When launching a new container, you can simply provide `dt-launcher-my-launcher` as
-command.
+To run inference entirely on the Duckiebot's Jetson Nano:
+
+1. Sync the repo and models to the robot:
+   ```bash
+   ./scripts/sync_repo_to_bot.sh
+   ./scripts/transfer_models.sh --all
+   ```
+2. SSH into the robot and build the workspace:
+   ```bash
+   ./scripts/setup_native_jetson.sh
+   ```
+3. Build TensorRT engines from the ONNX models:
+   ```bash
+   python3 packages/cond_imitation_learning_pkg/src/export_model.py --format trt --approach 7
+   ```
+4. Run natively on the robot:
+   ```bash
+   ./launchers/run_robot_native.sh --approach 7
+   ```
