@@ -3,9 +3,10 @@ name: Deploy Website
 on:
   push:
     branches:
-      - main
+      - v3
     paths:
-      - 'website/**' # Only run when the website is updated
+      - 'website/**'
+  workflow_dispatch: # Allows you to run this manually from the Actions tab # Only run when the website is updated
 
 permissions:
   contents: read
